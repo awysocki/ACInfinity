@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nodedefs>
+  <nodedef id="ACCTRL" nodeType="139,1,1">
+    <sts>
+      <st id="ST" editor="ONOFF" />
+    </sts>
+    <cmds>
+      <sends />
+      <accepts>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodedef>
+
+  <nodedef id="ACFAN" nodeType="139,1,2">
+    <sts>
+      <st id="ST" editor="PERCENT" />
+      <st id="GV0" editor="ONOFF" />
+    </sts>
+    <cmds>
+      <sends />
+      <accepts>
+        <cmd id="DON" />
+        <cmd id="DOF" />
+        <cmd id="SETSPD">
+          <p id="SPD" editor="PERCENT" init="ST" />
+        </cmd>
+        <cmd id="QUERY" />
+      </accepts>
+    </cmds>
+  </nodedef>
+</nodedefs>

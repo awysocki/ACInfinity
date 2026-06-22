@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<editors>
+  <editor id="ONOFF">
+    <range uom="2" subset="0,1" nls="0=Off;1=On" />
+  </editor>
+
+  <editor id="PERCENT">
+    <range uom="51" min="0" max="100" prec="0" />
+  </editor>
+</editors>

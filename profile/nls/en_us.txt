@@ -1,0 +1,7 @@
+ND-ACCTRL-NAME = AC Infinity Controller
+ND-ACFAN-NAME = AC Infinity Fan
+ST-ACCTRL-NAME = Node Server Online
+ST-ACFAN-NAME = Fan Speed
+GV0-ACFAN-NAME = Fan Power
+CMD-SETSPD-NAME = Set Speed
+CMD-SPD-NAME = Speed

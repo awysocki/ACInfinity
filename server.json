@@ -1,0 +1,33 @@
+{
+  "name": "AC Infinity Fan",
+  "docs": "https://github.com/your-org/isy-acinfinity",
+  "type": "python3",
+  "executable": "acinf_nodeserver.py",
+  "install": "install.sh",
+  "description": "ISY/IoX PG3 nodeserver for AC Infinity fan control via cloud API",
+  "notice": "Initial version uses cloud API hooks. BLE support can be added later.",
+  "shortPoll": 60,
+  "longPoll": 300,
+  "profile_version": "0.0.1",
+  "restart": "true",
+  "language": "python3",
+  "requirements": "requirements.txt",
+  "credits": [
+    {
+      "title": "AC Infinity Fan PG3",
+      "author": "You",
+      "version": "0.0.1",
+      "date": "2026-06-22",
+      "source": "Local"
+    }
+  ],
+  "customParams": {
+    "api_token": "",
+    "device_id": "",
+    "api_base_url": "https://api.acinfinity.com",
+    "status_path": "/v1/devices/{device_id}",
+    "power_path": "/v1/devices/{device_id}/power",
+    "speed_path": "/v1/devices/{device_id}/speed",
+    "mock_mode": "true"
+  }
+}
