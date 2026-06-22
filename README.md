@@ -24,13 +24,26 @@ Implementation note: this project uses original clean-room code in this reposito
 Set these in PG3 for the nodeserver:
 
 - `mock_mode`: `true` or `false` (`true` by default)
-- `api_base_url`: default `https://www.acinfinityserver.com`
+- `api_base_url`: default `http://www.acinfinityserver.com`
 - `api_token`: optional app token (appId). If empty, login is performed using email/password.
 - `email`: AC Infinity account email (used when `api_token` is not set)
 - `password`: AC Infinity account password (used when `api_token` is not set)
+- `controller_type`: set to `controller69pro` for Controller 69 Pro (default)
 - `device_id`: target controller device id (`devId`). If empty, first account device is used.
 - `port`: fan port number (default `1`)
 - `user_agent`: request user-agent header (default `okhttp/4.12.0`)
+
+Common values:
+
+- `controller69pro`: Controller 69 Pro and similar newer cloud profile
+- `controller69`: Standard Controller 69 profile
+- `auto`: try pro-style write first, then standard fallback
+
+Security warning:
+
+- AC Infinity cloud API behavior suggests HTTP transport may be required.
+- If using email/password or token in live mode, treat network path as potentially unencrypted.
+- Use a dedicated AC Infinity account/password for automation.
 
 ## Cloud Payload Mapping
 

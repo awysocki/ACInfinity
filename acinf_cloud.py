@@ -8,6 +8,7 @@ class ACInfinityCloudClient:
     API_URL_GET_DEVICE_INFO_LIST_ALL = "/api/user/devInfoListAll"
     API_URL_GET_DEV_MODE_SETTING = "/api/dev/getdevModeSettingList"
     API_URL_ADD_DEV_MODE = "/api/dev/addDevMode"
+    API_URL_MODE_AND_SETTINGS = "/api/dev/modeAndSetting"
 
     def __init__(
         self,
@@ -16,6 +17,7 @@ class ACInfinityCloudClient:
         device_id,
         email,
         password,
+        controller_type="controller69",
         port=1,
         user_agent="okhttp/4.12.0",
         mock_mode=True,
@@ -26,6 +28,7 @@ class ACInfinityCloudClient:
         self.device_id = device_id.strip() if device_id else ""
         self.email = email.strip() if email else ""
         self.password = password if password else ""
+        self.controller_type = self._normalize_controller_type(controller_type)
         self.port = int(port) if str(port).strip() else 1
         self.user_agent = user_agent.strip() if user_agent else "okhttp/4.12.0"
         self.mock_mode = mock_mode
@@ -36,13 +39,35 @@ class ACInfinityCloudClient:
             "speed": 0,
         }
 
-    def _headers(self, include_token=True):
+    @staticmethod
+    def _normalize_controller_type(controller_type):
+        text = str(controller_type or "controller69").strip().lower()
+        aliases = {
+            "69": "controller69",
+            "standard": "controller69",
+            "controller69": "controller69",
+            "controller_69": "controller69",
+            "69pro": "controller69pro",
+            "controller69pro": "controller69pro",
+            "controller_69_pro": "controller69pro",
+            "controller69_pro": "controller69pro",
+            "pro": "controller69pro",
+            "ai_plus": "ai_plus",
+            "ai-plus": "ai_plus",
+            "aiplus": "ai_plus",
+            "auto": "auto",
+        }
+        return aliases.get(text, "controller69")
+
+    def _headers(self, include_token=True, use_min_version=False):
         headers = {
             "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
             "User-Agent": self.user_agent,
         }
         if include_token and self.api_token:
             headers["token"] = self.api_token
+        if use_min_version:
+            headers["minversion"] = "3.5"
         return headers
 
     def _post(self, path, payload, include_token=True):
@@ -59,6 +84,20 @@ class ACInfinityCloudClient:
             raise ValueError(f"AC Infinity API error for {path}: {msg}")
         return body
 
+    def _put(self, path, query_params, include_token=True, use_min_version=False):
+        response = requests.put(
+            f"{self.api_base_url}{path}",
+            headers=self._headers(include_token=include_token, use_min_version=use_min_version),
+            params=query_params,
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        body = response.json() if response.content else {}
+        if body and body.get("code", 200) != 200:
+            msg = body.get("msg", "unknown API error")
+            raise ValueError(f"AC Infinity API error for {path}: {msg}")
+        return body
+
     def _ensure_cloud_ready(self):
         if not self.api_token:
             if not self.email or not self.password:
@@ -70,6 +109,11 @@ class ACInfinityCloudClient:
 
         if self.port < 0:
             raise ValueError("port must be >= 0")
+
+        if self.controller_type not in ("controller69", "controller69pro", "ai_plus", "auto"):
+            raise ValueError(
+                "Unsupported controller_type. Use controller69, controller69pro, ai_plus, or auto"
+            )
 
     def login(self):
         normalized_password = self.password[:25]
@@ -166,6 +210,48 @@ class ACInfinityCloudClient:
 
         self._post(self.API_URL_ADD_DEV_MODE, payload, include_token=True)
 
+    def _put_mode_and_setting(self, at_type, speed):
+        payload = {
+            "atType": int(at_type),
+            "devId": self.device_id,
+            "port": self.port,
+        }
+        if int(at_type) == 1:
+            payload["modeAndSettingIdStr"] = "[16,17]"
+            payload["offSpeed"] = 0
+            payload["offSpead"] = 0
+        else:
+            payload["modeAndSettingIdStr"] = "[16,18]"
+            payload["onSpeed"] = int(speed)
+            payload["onSpead"] = int(speed)
+
+        self._put(
+            self.API_URL_MODE_AND_SETTINGS,
+            payload,
+            include_token=True,
+            use_min_version=True,
+        )
+
+    def _write_mode(self, at_type, speed):
+        if self.controller_type == "controller69":
+            self._post_mode(at_type=at_type, speed=speed)
+            return
+
+        if self.controller_type in ("controller69pro", "ai_plus"):
+            try:
+                self._put_mode_and_setting(at_type=at_type, speed=speed)
+                return
+            except Exception:
+                self._post_mode(at_type=at_type, speed=speed)
+                return
+
+        try:
+            self._put_mode_and_setting(at_type=at_type, speed=speed)
+            return
+        except Exception:
+            self._post_mode(at_type=at_type, speed=speed)
+            return
+
     def set_power(self, is_on):
         if self.mock_mode:
             self._mock_state["is_on"] = bool(is_on)
@@ -180,9 +266,9 @@ class ACInfinityCloudClient:
         speed = current["speed"] if current["speed"] > 0 else 10
 
         if is_on:
-            self._post_mode(at_type=2, speed=speed)
+            self._write_mode(at_type=2, speed=speed)
         else:
-            self._post_mode(at_type=1, speed=0)
+            self._write_mode(at_type=1, speed=0)
         return self.get_fan_state()
 
     def set_speed(self, speed):
@@ -194,7 +280,7 @@ class ACInfinityCloudClient:
 
         self._ensure_cloud_ready()
         if speed == 0:
-            self._post_mode(at_type=1, speed=0)
+            self._write_mode(at_type=1, speed=0)
         else:
-            self._post_mode(at_type=2, speed=speed)
+            self._write_mode(at_type=2, speed=speed)
         return self.get_fan_state()

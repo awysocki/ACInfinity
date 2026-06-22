@@ -108,14 +108,45 @@ class ACInfinityController(udi_interface.Node):
         text = str(value).strip().lower()
         return text in ("1", "true", "yes", "on")
 
+    def _normalize_base_url(self, base_url):
+        if not base_url:
+            return "http://www.acinfinityserver.com"
+
+        text = str(base_url).strip()
+        if text.startswith("https://www.acinfinityserver.com"):
+            LOGGER.warning(
+                "AC Infinity cloud endpoint appears to require HTTP. Converting api_base_url to http://www.acinfinityserver.com"
+            )
+            return text.replace("https://", "http://", 1)
+        return text
+
+    def _log_cloud_warnings(self, params):
+        mock_mode = self._to_bool(params.get("mock_mode", "true"), default=True)
+        if mock_mode:
+            return
+
+        LOGGER.warning(
+            "AC Infinity cloud transport may be HTTP. Credentials and tokens could be exposed in transit. Use a dedicated account/password."
+        )
+
+        api_token = str(params.get("api_token", "")).strip()
+        email = str(params.get("email", "")).strip()
+        password = str(params.get("password", ""))
+        if not api_token and (not email or not password):
+            LOGGER.warning("Set api_token OR both email and password in PG3 custom parameters.")
+
     def _build_client(self):
         p = self.Parameters
+        self._log_cloud_warnings(p)
+        controller_type = str(p.get("controller_type", "controller69")).strip() or "controller69"
+        LOGGER.info("Controller profile: %s", controller_type)
         self.client = ACInfinityCloudClient(
-            api_base_url=p.get("api_base_url", "https://www.acinfinityserver.com"),
+            api_base_url=self._normalize_base_url(p.get("api_base_url", "http://www.acinfinityserver.com")),
             api_token=p.get("api_token", ""),
             device_id=p.get("device_id", ""),
             email=p.get("email", ""),
             password=p.get("password", ""),
+            controller_type=controller_type,
             port=p.get("port", "1"),
             user_agent=p.get("user_agent", "okhttp/4.12.0"),
             mock_mode=self._to_bool(p.get("mock_mode", "true"), default=True),
