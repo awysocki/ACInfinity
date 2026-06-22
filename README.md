@@ -2,6 +2,8 @@
 
 This is a starter Polyglot v3 nodeserver for controlling an AC Infinity fan from ISY/IoX (UD Mobile and Admin Console/web).
 
+Implementation note: this project uses original clean-room code in this repository. It does not copy source from other projects.
+
 ## Current Scope
 
 - Cloud API path (reverse-engineered endpoints)
@@ -22,24 +24,24 @@ This is a starter Polyglot v3 nodeserver for controlling an AC Infinity fan from
 Set these in PG3 for the nodeserver:
 
 - `mock_mode`: `true` or `false` (`true` by default)
-- `api_base_url`: default `https://api.acinfinity.com`
-- `api_token`: cloud bearer token
-- `device_id`: target fan device id
-- `status_path`: default `/v1/devices/{device_id}`
-- `power_path`: default `/v1/devices/{device_id}/power`
-- `speed_path`: default `/v1/devices/{device_id}/speed`
-
-If your reverse-engineered routes differ, update the path params above and adjust the JSON mappings in `acinf_cloud.py`.
+- `api_base_url`: default `https://www.acinfinityserver.com`
+- `api_token`: optional app token (appId). If empty, login is performed using email/password.
+- `email`: AC Infinity account email (used when `api_token` is not set)
+- `password`: AC Infinity account password (used when `api_token` is not set)
+- `device_id`: target controller device id (`devId`). If empty, first account device is used.
+- `port`: fan port number (default `1`)
+- `user_agent`: request user-agent header (default `okhttp/4.12.0`)
 
 ## Cloud Payload Mapping
 
-The current client assumes:
+The current client uses these cloud calls:
 
-- status response contains `speed` and optional `is_on`
-- power endpoint accepts `{ "on": true|false }`
-- speed endpoint accepts `{ "speed": 0..100 }`
+- `POST /api/user/appUserLogin`
+- `POST /api/user/devInfoListAll`
+- `POST /api/dev/getdevModeSettingList`
+- `POST /api/dev/addDevMode`
 
-If your captures use different keys, edit `get_fan_state`, `set_power`, and `set_speed` in `acinf_cloud.py`.
+Read mapping for fan state is defensive and checks multiple keys (`speak`, `onSpead`, `onSpeed`, power/load state fields).
 
 ## Install
 
@@ -47,7 +49,7 @@ If your captures use different keys, edit `get_fan_state`, `set_power`, and `set
 2. In PG3, add a new local/custom nodeserver and point it to the repo.
 3. Start nodeserver with `mock_mode=true` first.
 4. Confirm fan node appears in IoX and control works in UD Mobile.
-5. Switch to `mock_mode=false` and set token/device/paths.
+5. Switch to `mock_mode=false` and set token or email/password plus device/port.
 6. Restart nodeserver and validate live cloud control.
 
 ## Notes

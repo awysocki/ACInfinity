@@ -111,12 +111,13 @@ class ACInfinityController(udi_interface.Node):
     def _build_client(self):
         p = self.Parameters
         self.client = ACInfinityCloudClient(
-            api_base_url=p.get("api_base_url", "https://api.acinfinity.com"),
+            api_base_url=p.get("api_base_url", "https://www.acinfinityserver.com"),
             api_token=p.get("api_token", ""),
             device_id=p.get("device_id", ""),
-            status_path=p.get("status_path", "/v1/devices/{device_id}"),
-            power_path=p.get("power_path", "/v1/devices/{device_id}/power"),
-            speed_path=p.get("speed_path", "/v1/devices/{device_id}/speed"),
+            email=p.get("email", ""),
+            password=p.get("password", ""),
+            port=p.get("port", "1"),
+            user_agent=p.get("user_agent", "okhttp/4.12.0"),
             mock_mode=self._to_bool(p.get("mock_mode", "true"), default=True),
         )
 
