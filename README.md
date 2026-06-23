@@ -70,3 +70,8 @@ Read mapping for fan state is defensive and checks multiple keys (`speak`, `onSp
 - BLE support is not implemented in this initial version.
 - Long poll is set to 300 seconds; tune in `server.json` as needed.
 - You can add multiple fan nodes later by expanding controller logic and parameters.
+
+## License
+
+- MIT License
+- Repository license file: https://github.com/awysocki/ISYACINF/blob/main/LICENSE
