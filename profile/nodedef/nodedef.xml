@@ -5,10 +5,7 @@
       <st id="ST" editor="ONOFF" />
     </sts>
     <cmds>
-      <sends>
-        <send id="DON" />
-        <send id="DOF" />
-      </sends>
+      <sends />
       <accepts>
         <cmd id="QUERY" />
       </accepts>
@@ -21,13 +18,6 @@
       <st id="GV0" editor="ONOFF" />
     </sts>
     <cmds>
-      <sends>
-        <send id="DON" />
-        <send id="DOF" />
-        <send id="SETSPD">
-          <p id="SPD" editor="SPEED10" init="ST" />
-        </send>
-      </sends>
       <accepts>
         <cmd id="DON" />
         <cmd id="DOF" />

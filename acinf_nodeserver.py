@@ -6,7 +6,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "0.1.5"
+VERSION = "0.2.0"
 
 
 class ACInfinityFanNode(udi_interface.Node):
@@ -121,6 +121,32 @@ class ACInfinityController(udi_interface.Node):
         self.poly.subscribe(self.poly.CUSTOMPARAMS, self.parameter_handler)
         self.poly.subscribe(self.poly.POLL, self.poll)
         self.poly.subscribe(self.poly.STOP, self.stop)
+
+    def _seed_required_custom_params(self):
+        required = {
+            "user": "",
+            "password": "",
+        }
+        missing = {}
+        for key, default in required.items():
+            if self.Parameters.get(key, None) is None:
+                missing[key] = default
+
+        if not missing:
+            return
+
+        LOGGER.info("Seeding missing custom params: %s", ", ".join(sorted(missing.keys())))
+
+        # Prefer direct Custom object persistence when available.
+        for key, default in missing.items():
+            self.Parameters[key] = default
+
+        # Fallback for interface versions that require explicit add/update.
+        if hasattr(self.poly, "addCustomParam"):
+            try:
+                self.poly.addCustomParam(missing)
+            except Exception as exc:
+                LOGGER.warning("Failed seeding custom params via addCustomParam: %s", exc)
 
     def _to_bool(self, value, default=False):
         if value is None:
@@ -243,6 +269,7 @@ class ACInfinityController(udi_interface.Node):
     def parameter_handler(self, params):
         LOGGER.info("Received custom params update")
         self.Parameters.load(params)
+        self._seed_required_custom_params()
         self._last_login_gate_reason = None
         self._build_client(params)
         self._sync_nodes_after_login()
@@ -250,6 +277,7 @@ class ACInfinityController(udi_interface.Node):
     def start(self):
         LOGGER.info("Starting AC Infinity nodeserver")
         self.poly.setCustomParamsDoc()
+        self._seed_required_custom_params()
         self._build_client()
         self._sync_nodes_after_login()
 
@@ -260,6 +288,15 @@ class ACInfinityController(udi_interface.Node):
         if poll_type == "longPoll" or self.poly.getNode("acifan1") is None:
             # Retry node creation while credentials/login/device discovery are being corrected.
             self._sync_on_poll()
+
+    def query(self, command=None):
+        self._sync_nodes_after_login()
+        self.setDriver("ST", 1, report=True, force=True)
+        return True
+
+    commands = {
+        "QUERY": query,
+    }
 
 
 if __name__ == "__main__":
