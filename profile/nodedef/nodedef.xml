@@ -5,7 +5,10 @@
       <st id="ST" editor="ONOFF" />
     </sts>
     <cmds>
-      <sends />
+      <sends>
+        <send id="DON" />
+        <send id="DOF" />
+      </sends>
       <accepts>
         <cmd id="QUERY" />
       </accepts>
@@ -14,16 +17,22 @@
 
   <nodedef id="ACFAN" nodeType="139,1,2">
     <sts>
-      <st id="ST" editor="PERCENT" />
+      <st id="ST" editor="SPEED10" />
       <st id="GV0" editor="ONOFF" />
     </sts>
     <cmds>
-      <sends />
+      <sends>
+        <send id="DON" />
+        <send id="DOF" />
+        <send id="SETSPD">
+          <p id="SPD" editor="SPEED10" init="ST" />
+        </send>
+      </sends>
       <accepts>
         <cmd id="DON" />
         <cmd id="DOF" />
         <cmd id="SETSPD">
-          <p id="SPD" editor="PERCENT" init="ST" />
+          <p id="SPD" editor="SPEED10" init="ST" />
         </cmd>
         <cmd id="QUERY" />
       </accepts>

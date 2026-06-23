@@ -23,21 +23,15 @@ Implementation note: this project uses original clean-room code in this reposito
 
 Set these in PG3 for the nodeserver:
 
-- `mock_mode`: `true` or `false` (`true` by default)
-- `api_base_url`: default `http://www.acinfinityserver.com`
-- `api_token`: optional app token (appId). If empty, login is performed using email/password.
-- `email`: AC Infinity account email (used when `api_token` is not set)
+- `user`: AC Infinity account email/username
 - `password`: AC Infinity account password (used when `api_token` is not set)
-- `controller_type`: set to `controller69pro` for Controller 69 Pro (default)
-- `device_id`: target controller device id (`devId`). If empty, first account device is used.
-- `port`: fan port number (default `1`)
-- `user_agent`: request user-agent header (default `okhttp/4.12.0`)
 
-Common values:
+Advanced values (`api_base_url`, `controller_type`, `device_id`, `port`, `user_agent`, `mock_mode`, and `api_token`) are handled internally with defaults and are intentionally not shown in the default PG3 custom parameter list.
 
-- `controller69pro`: Controller 69 Pro and similar newer cloud profile
-- `controller69`: Standard Controller 69 profile
-- `auto`: try pro-style write first, then standard fallback
+Node creation behavior:
+
+- No fan/runtime nodes are created until cloud login and device discovery succeed.
+- Enter `user` and `password`, save, and restart (or wait for long poll) to trigger node creation.
 
 Security warning:
 

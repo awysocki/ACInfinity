@@ -1,5 +1,10 @@
 import requests
 
+import udi_interface
+
+
+LOGGER = udi_interface.LOGGER
+
 
 class ACInfinityCloudClient:
     """Clean-room AC Infinity cloud client based on observed endpoint behavior."""
@@ -40,6 +45,18 @@ class ACInfinityCloudClient:
         }
 
     @staticmethod
+    def _redact_payload(payload):
+        redacted = dict(payload or {})
+        for key in ("password", "appPasswordl", "appPassword", "token"):
+            if key in redacted and redacted[key] not in (None, ""):
+                redacted[key] = "<redacted>"
+        return redacted
+
+    @staticmethod
+    def _log_json(label, data):
+        LOGGER.debug("%s: %s", label, data)
+
+    @staticmethod
     def _normalize_controller_type(controller_type):
         text = str(controller_type or "controller69").strip().lower()
         aliases = {
@@ -71,6 +88,7 @@ class ACInfinityCloudClient:
         return headers
 
     def _post(self, path, payload, include_token=True):
+        self._log_json(f"AC Infinity POST {path} request", self._redact_payload(payload))
         response = requests.post(
             f"{self.api_base_url}{path}",
             headers=self._headers(include_token=include_token),
@@ -79,12 +97,14 @@ class ACInfinityCloudClient:
         )
         response.raise_for_status()
         body = response.json()
+        self._log_json(f"AC Infinity POST {path} response", body)
         if body.get("code") != 200:
             msg = body.get("msg", "unknown API error")
             raise ValueError(f"AC Infinity API error for {path}: {msg}")
         return body
 
     def _put(self, path, query_params, include_token=True, use_min_version=False):
+        self._log_json(f"AC Infinity PUT {path} request", self._redact_payload(query_params))
         response = requests.put(
             f"{self.api_base_url}{path}",
             headers=self._headers(include_token=include_token, use_min_version=use_min_version),
@@ -93,6 +113,8 @@ class ACInfinityCloudClient:
         )
         response.raise_for_status()
         body = response.json() if response.content else {}
+        if body:
+            self._log_json(f"AC Infinity PUT {path} response", body)
         if body and body.get("code", 200) != 200:
             msg = body.get("msg", "unknown API error")
             raise ValueError(f"AC Infinity API error for {path}: {msg}")
@@ -101,7 +123,7 @@ class ACInfinityCloudClient:
     def _ensure_cloud_ready(self):
         if not self.api_token:
             if not self.email or not self.password:
-                raise ValueError("Set api_token OR set both email and password")
+                raise ValueError("Set api_token OR set both user and password")
             self.login()
 
         if not self.device_id:
@@ -128,6 +150,7 @@ class ACInfinityCloudClient:
         self.api_token = str(body.get("data", {}).get("appId", "")).strip()
         if not self.api_token:
             raise ValueError("Login succeeded but no appId was returned")
+        self._log_json("AC Infinity login parsed data", body.get("data", {}))
         return self.api_token
 
     def _discover_first_device_id(self):
@@ -137,6 +160,7 @@ class ACInfinityCloudClient:
             include_token=True,
         )
         devices = body.get("data", [])
+        self._log_json("AC Infinity device list parsed data", devices)
         if not devices:
             raise ValueError("No devices returned by AC Infinity cloud account")
         dev_id = devices[0].get("devId")
@@ -174,6 +198,7 @@ class ACInfinityCloudClient:
             include_token=True,
         )
         data = body.get("data", {})
+        self._log_json("AC Infinity mode/settings parsed data", data)
         if not isinstance(data, dict):
             return {}
         return data
@@ -209,6 +234,7 @@ class ACInfinityCloudClient:
             payload["onSpeed"] = int(speed)
 
         self._post(self.API_URL_ADD_DEV_MODE, payload, include_token=True)
+        self._log_json("AC Infinity addDevMode sent payload", self._redact_payload(payload))
 
     def _put_mode_and_setting(self, at_type, speed):
         payload = {
@@ -231,6 +257,7 @@ class ACInfinityCloudClient:
             include_token=True,
             use_min_version=True,
         )
+        self._log_json("AC Infinity modeAndSetting sent payload", self._redact_payload(payload))
 
     def _write_mode(self, at_type, speed):
         if self.controller_type == "controller69":
