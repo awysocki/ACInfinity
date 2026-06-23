@@ -6,15 +6,15 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "0.1.2"
+VERSION = "0.1.5"
 
 
 class ACInfinityFanNode(udi_interface.Node):
     id = "ACFAN"
 
-    # ST = speed percentage (0-100), GV0 = power (0/1)
+    # ST = fan speed level (0-10), GV0 = power (0/1)
     drivers = [
-        {"driver": "ST", "value": 0, "uom": 51},
+        {"driver": "ST", "value": 0, "uom": 56},
         {"driver": "GV0", "value": 0, "uom": 2},
     ]
 
@@ -242,12 +242,14 @@ class ACInfinityController(udi_interface.Node):
 
     def parameter_handler(self, params):
         LOGGER.info("Received custom params update")
+        self.Parameters.load(params)
         self._last_login_gate_reason = None
         self._build_client(params)
         self._sync_nodes_after_login()
 
     def start(self):
         LOGGER.info("Starting AC Infinity nodeserver")
+        self.poly.setCustomParamsDoc()
         self._build_client()
         self._sync_nodes_after_login()
 
