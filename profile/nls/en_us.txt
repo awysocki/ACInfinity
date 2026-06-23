@@ -1,23 +1,15 @@
-ND-ACCTRL-NAME = AC Infinity Controller
-ND-ACFAN-NAME = AC Infinity Fan
-ST-ACCTRL-NAME = Node Server Online
-ST-ACFAN-NAME = Fan Speed
-GV0-ACFAN-NAME = Fan Power
-CMD-DON-NAME = On
-CMD-DOF-NAME = Off
-CMD-SETSPD-NAME = Set Speed
-CMD-SPD-NAME = Speed
-CMD-QUERY-NAME = Query
-CMD-QUERY = Query
-CMD-ACCTRL-QUERY = Query
-CMD-ACFAN-QUERY = Query
+ND-controller-NAME = AC Infinity Controller
+ND-controller-ICON = GenericCtl
+ND-fan-NAME = AC Infinity Fan
+ND-fan-ICON = GenericFan
 
-ST-ACCTRL-ST-NAME = Node Server Online
-ST-ACFAN-ST-NAME = Fan Speed
-ST-ACFAN-GV0-NAME = Fan Power
-CMD-ACCTRL-QUERY-NAME = Query
-CMD-ACFAN-DON-NAME = On
-CMD-ACFAN-DOF-NAME = Off
-CMD-ACFAN-SETSPD-NAME = Set Speed
-CMD-ACFAN-QUERY-NAME = Query
-CMDP-ACFAN-SETSPD-SPD-NAME = Speed
+ST-controller-ST-NAME = Node Server Online
+ST-fan-ST-NAME = Fan Speed
+ST-fan-GV0-NAME = Fan Power
+
+CMD-controller-QUERY-NAME = Query
+CMD-fan-DON-NAME = On
+CMD-fan-DOF-NAME = Off
+CMD-fan-SETSPD-NAME = Set Speed
+CMD-fan-QUERY-NAME = Query
+CMDP-fan-SETSPD-SPD-NAME = Speed

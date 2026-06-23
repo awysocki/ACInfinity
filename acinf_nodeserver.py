@@ -6,11 +6,11 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 
 class ACInfinityFanNode(udi_interface.Node):
-    id = "ACFAN"
+    id = "fan"
 
     # ST = fan speed level (0-10), GV0 = power (0/1)
     drivers = [
@@ -103,7 +103,7 @@ class ACInfinityFanNode(udi_interface.Node):
 
 
 class ACInfinityController(udi_interface.Node):
-    id = "ACCTRL"
+    id = "controller"
 
     drivers = [
         {"driver": "ST", "value": 1, "uom": 2},

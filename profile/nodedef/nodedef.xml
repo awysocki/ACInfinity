@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<nodedefs>
-  <nodedef id="ACCTRL" nodeType="139,1,1">
+<nodeDefs>
+  <nodeDef id="controller" nls="ctl">
     <sts>
       <st id="ST" editor="ONOFF" />
     </sts>
@@ -10,14 +10,15 @@
         <cmd id="QUERY" />
       </accepts>
     </cmds>
-  </nodedef>
+  </nodeDef>
 
-  <nodedef id="ACFAN" nodeType="139,1,2">
+  <nodeDef id="fan" nls="fan">
     <sts>
       <st id="ST" editor="SPEED10" />
       <st id="GV0" editor="ONOFF" />
     </sts>
     <cmds>
+      <sends />
       <accepts>
         <cmd id="DON" />
         <cmd id="DOF" />
@@ -27,5 +28,5 @@
         <cmd id="QUERY" />
       </accepts>
     </cmds>
-  </nodedef>
-</nodedefs>
+  </nodeDef>
+</nodeDefs>
