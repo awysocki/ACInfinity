@@ -176,12 +176,25 @@ class ACInfinityCloudClient:
             return default
 
     @staticmethod
+    def _normalize_speed_level(value):
+        """Normalize AC Infinity speed values to IoX fan level scale (0-10).
+
+        Some payloads appear to use 0-10 while older mappings used 0-100.
+        Accept both and collapse to 0-10 for consistent node behavior.
+        """
+        raw = ACInfinityCloudClient._to_int(value, default=0)
+        raw = max(0, min(100, raw))
+        if raw <= 10:
+            return raw
+        return max(1, min(10, int(round(raw / 10.0))))
+
+    @staticmethod
     def _pick_speed(data):
         speed_candidates = [
-            data.get("speak"),
             data.get("onSpead"),
             data.get("onSpeed"),
             data.get("onSelfSpead"),
+            data.get("speak"),
         ]
         for candidate in speed_candidates:
             if candidate is not None:
@@ -208,9 +221,15 @@ class ACInfinityCloudClient:
             return dict(self._mock_state)
 
         self._ensure_cloud_ready()
+        LOGGER.debug(
+            "AC Infinity get_fan_state begin: device_id=%s port=%s controller_type=%s",
+            self.device_id,
+            self.port,
+            self.controller_type,
+        )
         data = self._read_raw_mode_settings()
 
-        speed = max(0, min(100, self._pick_speed(data)))
+        speed = self._normalize_speed_level(self._pick_speed(data))
         power_state = data.get("powerState")
         load_state = data.get("loadState")
         is_on = bool(
@@ -218,20 +237,30 @@ class ACInfinityCloudClient:
             or (self._to_int(load_state, default=0) == 1)
             or speed > 0
         )
-        return {"is_on": is_on, "speed": speed}
+        result = {"is_on": is_on, "speed": speed}
+        self._log_json("AC Infinity get_fan_state result", result)
+        return result
 
     def _post_mode(self, at_type, speed):
         payload = {
             "atType": int(at_type),
             "devId": self.device_id,
             "externalPort": self.port,
+            "modeType": 15,
+            "settingMode": 0,
         }
         if int(at_type) == 1:
             payload["offSpead"] = 0
             payload["offSpeed"] = 0
+            payload["powerState"] = 0
+            payload["loadState"] = 0
         else:
             payload["onSpead"] = int(speed)
             payload["onSpeed"] = int(speed)
+            payload["onSelfSpead"] = int(speed)
+            payload["speak"] = int(speed)
+            payload["powerState"] = 1
+            payload["loadState"] = 1
 
         self._post(self.API_URL_ADD_DEV_MODE, payload, include_token=True)
         self._log_json("AC Infinity addDevMode sent payload", self._redact_payload(payload))
@@ -241,13 +270,18 @@ class ACInfinityCloudClient:
             "atType": int(at_type),
             "devId": self.device_id,
             "port": self.port,
+            "externalPort": self.port,
         }
         if int(at_type) == 1:
             payload["modeAndSettingIdStr"] = "[16,17]"
+            payload["modeType"] = 15
+            payload["settingMode"] = 0
             payload["offSpeed"] = 0
             payload["offSpead"] = 0
         else:
             payload["modeAndSettingIdStr"] = "[16,18]"
+            payload["modeType"] = 15
+            payload["settingMode"] = 0
             payload["onSpeed"] = int(speed)
             payload["onSpead"] = int(speed)
 
@@ -260,6 +294,14 @@ class ACInfinityCloudClient:
         self._log_json("AC Infinity modeAndSetting sent payload", self._redact_payload(payload))
 
     def _write_mode(self, at_type, speed):
+        LOGGER.debug(
+            "AC Infinity _write_mode dispatch: controller_type=%s at_type=%s speed=%s device_id=%s port=%s",
+            self.controller_type,
+            at_type,
+            speed,
+            self.device_id,
+            self.port,
+        )
         if self.controller_type == "controller69":
             self._post_mode(at_type=at_type, speed=speed)
             return
@@ -292,22 +334,44 @@ class ACInfinityCloudClient:
         current = self.get_fan_state()
         speed = current["speed"] if current["speed"] > 0 else 10
 
+        LOGGER.debug(
+            "AC Infinity set_power request: is_on=%s current_state=%s chosen_speed=%s",
+            bool(is_on),
+            current,
+            speed,
+        )
+
         if is_on:
-            self._write_mode(at_type=2, speed=speed)
+            # For controller69, force an explicit OFF->ON transition to kick
+            # output when cloud state already reports ON but hardware is idle.
+            if self.controller_type == "controller69":
+                self._write_mode(at_type=1, speed=0)
+            self._write_mode(at_type=2, speed=max(1, speed))
         else:
             self._write_mode(at_type=1, speed=0)
-        return self.get_fan_state()
+        result = self.get_fan_state()
+        LOGGER.debug("AC Infinity set_power result: %s", result)
+        return result
 
     def set_speed(self, speed):
-        speed = max(0, min(100, int(speed)))
+        speed = self._normalize_speed_level(speed)
         if self.mock_mode:
             self._mock_state["speed"] = speed
             self._mock_state["is_on"] = speed > 0
             return dict(self._mock_state)
 
         self._ensure_cloud_ready()
+        LOGGER.debug(
+            "AC Infinity set_speed request: speed=%s device_id=%s port=%s controller_type=%s",
+            speed,
+            self.device_id,
+            self.port,
+            self.controller_type,
+        )
         if speed == 0:
             self._write_mode(at_type=1, speed=0)
         else:
             self._write_mode(at_type=2, speed=speed)
-        return self.get_fan_state()
+        result = self.get_fan_state()
+        LOGGER.debug("AC Infinity set_speed result: %s", result)
+        return result

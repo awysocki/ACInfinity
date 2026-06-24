@@ -8,7 +8,7 @@ Implementation note: this project uses original clean-room code in this reposito
 
 - Cloud API path (reverse-engineered endpoints)
 - Fan power on/off
-- Fan speed set/query (0-100)
+- Fan speed set/query (0-10)
 - Polling-based state refresh
 - Mock mode for UI testing before cloud endpoints are finalized
 
@@ -25,6 +25,7 @@ Set these in PG3 for the nodeserver:
 
 - `user`: AC Infinity account email/username
 - `password`: AC Infinity account password (used when `api_token` is not set)
+- `moredebug`: set to `1` to log extra AC Infinity request/response details
 
 Advanced values (`api_base_url`, `controller_type`, `device_id`, `port`, `user_agent`, `mock_mode`, and `api_token`) are handled internally with defaults and are intentionally not shown in the default PG3 custom parameter list.
 

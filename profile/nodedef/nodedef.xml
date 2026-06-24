@@ -3,6 +3,7 @@
   <nodeDef id="controller" nls="ctl">
     <sts>
       <st id="ST" editor="ONOFF" />
+      <st id="GV1" editor="NSVER" />
     </sts>
     <cmds>
       <sends />

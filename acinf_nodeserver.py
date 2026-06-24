@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import threading
 import traceback
 
 import udi_interface
@@ -6,7 +7,11 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "0.2.1"
+VERSION = "0.2.5"
+try:
+    VERSION_PATCH = int(str(VERSION).split(".")[-1])
+except Exception:
+    VERSION_PATCH = 0
 
 
 class ACInfinityFanNode(udi_interface.Node):
@@ -28,22 +33,21 @@ class ACInfinityFanNode(udi_interface.Node):
 
     @staticmethod
     def _percent_to_level(speed_percent):
-        speed_percent = max(0, min(100, int(speed_percent)))
-        if speed_percent <= 0:
+        speed_raw = max(0, min(100, int(speed_percent)))
+        if speed_raw <= 0:
             return 0
-        return max(1, min(10, int(round(speed_percent / 10.0))))
+        if speed_raw <= 10:
+            return speed_raw
+        return max(1, min(10, int(round(speed_raw / 10.0))))
 
     @staticmethod
     def _level_to_percent(speed_level):
         speed_level = max(0, min(10, int(speed_level)))
-        if speed_level <= 0:
-            return 0
-        return max(10, min(100, speed_level * 10))
+        return speed_level
 
     def _apply_state(self, state):
-        speed_percent = max(0, min(100, int(state.get("speed", 0))))
-        speed_level = self._percent_to_level(speed_percent)
-        is_on = bool(state.get("is_on", speed_percent > 0))
+        speed_level = self._percent_to_level(state.get("speed", 0))
+        is_on = bool(state.get("is_on", speed_level > 0))
         if speed_level > 0:
             self._last_nonzero_speed = speed_level
 
@@ -84,7 +88,19 @@ class ACInfinityFanNode(udi_interface.Node):
 
     def cmd_set_speed(self, command):
         try:
-            speed_level = int(command.get("value", 0))
+            LOGGER.debug("Raw SETSPD command payload: %s", command)
+            speed_level = 0
+            if isinstance(command, dict):
+                raw_value = command.get("value")
+                if raw_value in (None, ""):
+                    query = command.get("query")
+                    if isinstance(query, dict):
+                        for key in ("value", "SPD", "SPD.uom56", "spd", "speed"):
+                            if key in query and str(query.get(key)).strip() != "":
+                                raw_value = query.get(key)
+                                break
+                if raw_value not in (None, ""):
+                    speed_level = int(float(raw_value))
             if speed_level > 0:
                 self._last_nonzero_speed = speed_level
             state = self.client.set_speed(self._level_to_percent(speed_level))
@@ -107,6 +123,7 @@ class ACInfinityController(udi_interface.Node):
 
     drivers = [
         {"driver": "ST", "value": 1, "uom": 2},
+        {"driver": "GV1", "value": VERSION_PATCH, "uom": 25},
     ]
 
     def __init__(self, polyglot, primary, address, name):
@@ -114,6 +131,7 @@ class ACInfinityController(udi_interface.Node):
         self.poly = polyglot
         self.Parameters = udi_interface.Custom(polyglot, "customparams")
         self.client = None
+        self._client_lock = threading.RLock()
         self._last_login_gate_reason = None
         self._login_ready_logged = False
 
@@ -268,18 +286,20 @@ class ACInfinityController(udi_interface.Node):
 
     def parameter_handler(self, params):
         LOGGER.info("Received custom params update")
-        self.Parameters.load(params)
-        self._seed_required_custom_params()
-        self._last_login_gate_reason = None
-        self._build_client(params)
-        self._sync_nodes_after_login()
+        with self._client_lock:
+            self.Parameters.load(params)
+            self._seed_required_custom_params()
+            self._last_login_gate_reason = None
+            self._build_client(params)
+            self._sync_nodes_after_login()
 
     def start(self):
         LOGGER.info("Starting AC Infinity nodeserver")
         self.poly.setCustomParamsDoc()
-        self._seed_required_custom_params()
-        self._build_client()
-        self._sync_nodes_after_login()
+        with self._client_lock:
+            self._seed_required_custom_params()
+            self._build_client()
+            self._sync_nodes_after_login()
 
     def stop(self):
         LOGGER.info("Stopping AC Infinity nodeserver")
@@ -287,11 +307,14 @@ class ACInfinityController(udi_interface.Node):
     def poll(self, poll_type):
         if poll_type == "longPoll" or self.poly.getNode("acifan1") is None:
             # Retry node creation while credentials/login/device discovery are being corrected.
-            self._sync_on_poll()
+            with self._client_lock:
+                self._sync_on_poll()
 
     def query(self, command=None):
-        self._sync_nodes_after_login()
+        with self._client_lock:
+            self._sync_nodes_after_login()
         self.setDriver("ST", 1, report=True, force=True)
+        self.setDriver("GV1", VERSION_PATCH, report=True, force=True)
         return True
 
     commands = {
