@@ -7,7 +7,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.010"
+VERSION = "2026.6.011"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -304,8 +304,12 @@ class ACInfinityController(udi_interface.Node):
         self.setDriver("GV3", VERSION_REVISION, report=True, force=True)
         try:
             # Show connected/plugged port count at controller level.
-            self.setDriver("GV4", int(self.client.get_connected_port_count()), report=True, force=True)
-        except Exception:
+            port_count = int(self.client.get_connected_port_count())
+            LOGGER.debug("Controller port count update: %s", port_count)
+            self.setDriver("GV4", port_count, report=True, force=True)
+        except Exception as exc:
+            LOGGER.warning("Failed to update controller port count: %s", exc)
+            LOGGER.debug(traceback.format_exc())
             self.setDriver("GV4", 0, report=True, force=True)
         return True
 

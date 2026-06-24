@@ -190,16 +190,32 @@ class ACInfinityCloudClient:
         if target is None:
             target = devices[0]
 
-        ports = ((target.get("deviceInfo") or {}).get("ports") or [])
+        device_info = target.get("deviceInfo") or {}
+        ports = device_info.get("ports") or target.get("ports") or []
+        if not isinstance(ports, list):
+            LOGGER.debug("AC Infinity ports payload is not a list: %s", ports)
+            return 0
+
         connected = 0
         for port in ports:
+            if not isinstance(port, dict):
+                continue
             resistance = self._to_int(port.get("portResistance"), default=65535)
             online = self._to_int(port.get("online"), default=0)
             load_state = self._to_int(port.get("loadState"), default=0)
+            port_id = port.get("port") or port.get("externalPort") or port.get("portId")
             # Treat a port as plugged when resistance is not open-circuit (65535)
             # or the cloud reports the port online/loaded.
             if resistance != 65535 or online == 1 or load_state == 1:
                 connected += 1
+            LOGGER.debug(
+                "AC Infinity port summary: port=%s resistance=%s online=%s loadState=%s connected=%s",
+                port_id,
+                resistance,
+                online,
+                load_state,
+                resistance != 65535 or online == 1 or load_state == 1,
+            )
 
         LOGGER.debug("AC Infinity connected port count: %s", connected)
         return connected
