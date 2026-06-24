@@ -7,7 +7,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.001"
+VERSION = "2026.6.010"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -53,9 +53,13 @@ class ACInfinityFanNode(udi_interface.Node):
 
     def _apply_state(self, state):
         speed_level = self._percent_to_level(state.get("speed", 0))
+        remembered_level = speed_level
         is_on = bool(state.get("is_on", speed_level > 0))
-        if speed_level > 0:
-            self._last_nonzero_speed = speed_level
+        if remembered_level > 0:
+            # Keep last known non-zero speed for next ON, even when currently OFF.
+            self._last_nonzero_speed = remembered_level
+        if not is_on:
+            speed_level = 0
 
         self.setDriver("ST", speed_level, report=True, force=True)
         self.setDriver("GV0", 1 if is_on else 0, report=True, force=True)
@@ -111,12 +115,17 @@ class ACInfinityFanNode(udi_interface.Node):
             speed_level = max(0, min(10, speed_level))
             if speed_level > 0:
                 self._last_nonzero_speed = speed_level
-                self._pending_speed_level = speed_level
-            self.setDriver("ST", speed_level, report=True, force=True)
-            LOGGER.debug(
-                "Deferred speed update stored locally: level=%s (cloud write happens on DON/DOF)",
-                speed_level,
-            )
+            is_on = int(self.getDriver("GV0")) == 1
+            if is_on:
+                state = self.client.set_speed(self._level_to_percent(speed_level))
+                self._pending_speed_level = None
+                self._apply_state(state)
+                LOGGER.debug("Speed update applied immediately: level=%s", speed_level)
+            else:
+                # Keep local speed preference while off; apply to cloud on next DON.
+                self._pending_speed_level = speed_level if speed_level > 0 else None
+                self.setDriver("ST", speed_level, report=True, force=True)
+                LOGGER.debug("Speed update deferred while OFF: level=%s", speed_level)
         except Exception as exc:
             LOGGER.error("Failed to set fan speed: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -138,6 +147,7 @@ class ACInfinityController(udi_interface.Node):
         {"driver": "GV1", "value": VERSION_YEAR, "uom": 25},
         {"driver": "GV2", "value": VERSION_MONTH, "uom": 25},
         {"driver": "GV3", "value": VERSION_REVISION, "uom": 25},
+        {"driver": "GV4", "value": 0, "uom": 25},
     ]
 
     def __init__(self, polyglot, primary, address, name):
@@ -289,13 +299,18 @@ class ACInfinityController(udi_interface.Node):
 
         fan = self._ensure_fan_node()
         fan.query()
+        self.setDriver("GV1", VERSION_YEAR, report=True, force=True)
+        self.setDriver("GV2", VERSION_MONTH, report=True, force=True)
+        self.setDriver("GV3", VERSION_REVISION, report=True, force=True)
+        try:
+            # Show connected/plugged port count at controller level.
+            self.setDriver("GV4", int(self.client.get_connected_port_count()), report=True, force=True)
+        except Exception:
+            self.setDriver("GV4", 0, report=True, force=True)
         return True
 
     def _sync_on_poll(self):
-        if self.poly.getNode("acifan1") is not None:
-            self._sync_nodes_after_login()
-            return
-
+        # Always re-read cloud state so physical button changes are reflected in IoX.
         self._sync_nodes_after_login()
 
     def parameter_handler(self, params):
@@ -319,18 +334,15 @@ class ACInfinityController(udi_interface.Node):
         LOGGER.info("Stopping AC Infinity nodeserver")
 
     def poll(self, poll_type):
-        if poll_type == "longPoll" or self.poly.getNode("acifan1") is None:
-            # Retry node creation while credentials/login/device discovery are being corrected.
-            with self._client_lock:
-                self._sync_on_poll()
+        # Keep IoX in sync with controller/hardware changes on every poll.
+        with self._client_lock:
+            self._sync_on_poll()
 
     def query(self, command=None):
         with self._client_lock:
             self._sync_nodes_after_login()
         self.setDriver("ST", 1, report=True, force=True)
-        self.setDriver("GV1", VERSION_YEAR, report=True, force=True)
-        self.setDriver("GV2", VERSION_MONTH, report=True, force=True)
-        self.setDriver("GV3", VERSION_REVISION, report=True, force=True)
+        # GV1/GV2/GV3 version and GV4 port count are maintained by _sync_nodes_after_login().
         return True
 
     commands = {

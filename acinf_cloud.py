@@ -168,6 +168,42 @@ class ACInfinityCloudClient:
             raise ValueError("Device list returned but no devId found")
         return str(dev_id)
 
+    def get_connected_port_count(self):
+        if self.mock_mode:
+            return 0
+
+        self._ensure_cloud_ready()
+        body = self._post(
+            self.API_URL_GET_DEVICE_INFO_LIST_ALL,
+            {"userId": self.api_token},
+            include_token=True,
+        )
+        devices = body.get("data", [])
+        if not isinstance(devices, list) or not devices:
+            return 0
+
+        target = None
+        for device in devices:
+            if str(device.get("devId", "")).strip() == str(self.device_id):
+                target = device
+                break
+        if target is None:
+            target = devices[0]
+
+        ports = ((target.get("deviceInfo") or {}).get("ports") or [])
+        connected = 0
+        for port in ports:
+            resistance = self._to_int(port.get("portResistance"), default=65535)
+            online = self._to_int(port.get("online"), default=0)
+            load_state = self._to_int(port.get("loadState"), default=0)
+            # Treat a port as plugged when resistance is not open-circuit (65535)
+            # or the cloud reports the port online/loaded.
+            if resistance != 65535 or online == 1 or load_state == 1:
+                connected += 1
+
+        LOGGER.debug("AC Infinity connected port count: %s", connected)
+        return connected
+
     @staticmethod
     def _to_int(value, default=0):
         try:
@@ -232,11 +268,23 @@ class ACInfinityCloudClient:
         speed = self._normalize_speed_level(self._pick_speed(data))
         power_state = data.get("powerState")
         load_state = data.get("loadState")
-        is_on = bool(
-            (self._to_int(power_state, default=0) == 1)
-            or (self._to_int(load_state, default=0) == 1)
-            or speed > 0
-        )
+
+        has_power_flag = power_state is not None
+        has_load_flag = load_state is not None
+
+        if has_power_flag or has_load_flag:
+            is_on = bool(
+                (self._to_int(power_state, default=0) == 1)
+                or (self._to_int(load_state, default=0) == 1)
+            )
+        else:
+            # Fallback only when cloud does not provide explicit power/load flags.
+            is_on = speed > 0
+
+        # AC Infinity often keeps the configured ON speed even while power is off.
+        # Report runtime speed as 0 when the fan is off so IoX state is consistent.
+        if not is_on:
+            speed = 0
         result = {"is_on": is_on, "speed": speed}
         self._log_json("AC Infinity get_fan_state result", result)
         return result

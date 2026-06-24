@@ -1,5 +1,7 @@
 ND-controller-NAME = AC Infinity Controller
 ND-controller-ICON = GenericCtl
+ND-ctl-NAME = AC Infinity Controller
+ND-ctl-ICON = GenericCtl
 ND-fan-NAME = AC Infinity Fan
 ND-fan-ICON = GenericFan
 
@@ -7,10 +9,17 @@ ST-controller-ST-NAME = Node Server Online
 ST-controller-GV1-NAME = Year
 ST-controller-GV2-NAME = Mon
 ST-controller-GV3-NAME = Revision
+ST-controller-GV4-NAME = Ports Connected
+ST-ctl-ST-NAME = Node Server Online
+ST-ctl-GV1-NAME = Year
+ST-ctl-GV2-NAME = Mon
+ST-ctl-GV3-NAME = Revision
+ST-ctl-GV4-NAME = Ports Connected
 ST-fan-ST-NAME = Fan Speed
-ST-fan-GV0-NAME = Fan Power
+ST-fan-GV0-NAME = FAN
 
 CMD-controller-QUERY-NAME = Query
+CMD-ctl-QUERY-NAME = Query
 CMD-fan-DON-NAME = On
 CMD-fan-DOF-NAME = Off
 CMD-fan-SETSPD-NAME = Set Speed
