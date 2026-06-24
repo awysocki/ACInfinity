@@ -2,7 +2,7 @@
 <nodeDefs>
   <nodeDef id="controller" nls="ctl">
     <sts>
-      <st id="ST" editor="ONOFF" />
+      <st id="ST" editor="FANONOFF" />
       <st id="GV1" editor="NSYEAR" />
       <st id="GV2" editor="NSMON" />
       <st id="GV3" editor="NSREV" />
@@ -19,7 +19,7 @@
   <nodeDef id="fan" nls="fan">
     <sts>
       <st id="ST" editor="SPEED10" />
-      <st id="GV0" editor="ONOFF" />
+      <st id="GV0" editor="FANONOFF" />
     </sts>
     <cmds>
       <sends />
