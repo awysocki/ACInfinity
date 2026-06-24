@@ -7,11 +7,16 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "0.2.5"
+VERSION = "2026.6.001"
 try:
-    VERSION_PATCH = int(str(VERSION).split(".")[-1])
+    _version_parts = str(VERSION).split(".")
+    VERSION_YEAR = int(_version_parts[0])
+    VERSION_MONTH = int(_version_parts[1])
+    VERSION_REVISION = int(_version_parts[2])
 except Exception:
-    VERSION_PATCH = 0
+    VERSION_YEAR = 2026
+    VERSION_MONTH = 1
+    VERSION_REVISION = 0
 
 
 class ACInfinityFanNode(udi_interface.Node):
@@ -27,6 +32,7 @@ class ACInfinityFanNode(udi_interface.Node):
         super().__init__(polyglot, primary, address, name)
         self.client = client
         self._last_nonzero_speed = 10
+        self._pending_speed_level = None
 
     def set_client(self, client):
         self.client = client
@@ -65,9 +71,10 @@ class ACInfinityFanNode(udi_interface.Node):
 
     def cmd_on(self, command):
         try:
-            state = self.client.set_power(True)
-            if int(state.get("speed", 0)) == 0:
-                state = self.client.set_speed(self._level_to_percent(self._last_nonzero_speed))
+            target_level = self._pending_speed_level if self._pending_speed_level is not None else self._last_nonzero_speed
+            target_level = max(1, min(10, int(target_level)))
+            state = self.client.set_power(True, speed_preference=self._level_to_percent(target_level))
+            self._pending_speed_level = None
             self._apply_state(state)
         except Exception as exc:
             LOGGER.error("Failed to turn fan on: %s", exc)
@@ -101,10 +108,15 @@ class ACInfinityFanNode(udi_interface.Node):
                                 break
                 if raw_value not in (None, ""):
                     speed_level = int(float(raw_value))
+            speed_level = max(0, min(10, speed_level))
             if speed_level > 0:
                 self._last_nonzero_speed = speed_level
-            state = self.client.set_speed(self._level_to_percent(speed_level))
-            self._apply_state(state)
+                self._pending_speed_level = speed_level
+            self.setDriver("ST", speed_level, report=True, force=True)
+            LOGGER.debug(
+                "Deferred speed update stored locally: level=%s (cloud write happens on DON/DOF)",
+                speed_level,
+            )
         except Exception as exc:
             LOGGER.error("Failed to set fan speed: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -123,7 +135,9 @@ class ACInfinityController(udi_interface.Node):
 
     drivers = [
         {"driver": "ST", "value": 1, "uom": 2},
-        {"driver": "GV1", "value": VERSION_PATCH, "uom": 25},
+        {"driver": "GV1", "value": VERSION_YEAR, "uom": 25},
+        {"driver": "GV2", "value": VERSION_MONTH, "uom": 25},
+        {"driver": "GV3", "value": VERSION_REVISION, "uom": 25},
     ]
 
     def __init__(self, polyglot, primary, address, name):
@@ -314,7 +328,9 @@ class ACInfinityController(udi_interface.Node):
         with self._client_lock:
             self._sync_nodes_after_login()
         self.setDriver("ST", 1, report=True, force=True)
-        self.setDriver("GV1", VERSION_PATCH, report=True, force=True)
+        self.setDriver("GV1", VERSION_YEAR, report=True, force=True)
+        self.setDriver("GV2", VERSION_MONTH, report=True, force=True)
+        self.setDriver("GV3", VERSION_REVISION, report=True, force=True)
         return True
 
     commands = {

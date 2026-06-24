@@ -321,7 +321,7 @@ class ACInfinityCloudClient:
             self._post_mode(at_type=at_type, speed=speed)
             return
 
-    def set_power(self, is_on):
+    def set_power(self, is_on, speed_preference=None):
         if self.mock_mode:
             self._mock_state["is_on"] = bool(is_on)
             if not is_on:
@@ -332,7 +332,8 @@ class ACInfinityCloudClient:
 
         self._ensure_cloud_ready()
         current = self.get_fan_state()
-        speed = current["speed"] if current["speed"] > 0 else 10
+        preferred = self._normalize_speed_level(speed_preference) if speed_preference is not None else 0
+        speed = preferred if preferred > 0 else (current["speed"] if current["speed"] > 0 else 10)
 
         LOGGER.debug(
             "AC Infinity set_power request: is_on=%s current_state=%s chosen_speed=%s",
