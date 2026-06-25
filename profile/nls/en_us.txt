@@ -15,8 +15,10 @@ ST-ctl-GV1-NAME = Rev Year
 ST-ctl-GV2-NAME = Rev Mon
 ST-ctl-GV3-NAME = Revision
 ST-ctl-GV4-NAME = Ports Connected
-ST-fan-ST-NAME = FAN
-ST-fan-GV0-NAME = Fan Speed
+ST-fan-ST-NAME = Local Power
+ST-fan-GV0-NAME = Local Speed
+ST-fan-GV1-NAME = Remote Power
+ST-fan-GV2-NAME = Remote Speed
 
 CMD-controller-QUERY-NAME = Query
 CMD-ctl-QUERY-NAME = Query

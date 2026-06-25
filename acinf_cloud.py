@@ -414,6 +414,7 @@ class ACInfinityCloudClient:
             self._write_mode(at_type=2, speed=max(1, speed))
         else:
             self._write_mode(at_type=1, speed=0)
+
         result = self.get_fan_state()
         LOGGER.debug("AC Infinity set_power result: %s", result)
         return result

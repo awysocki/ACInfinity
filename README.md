@@ -12,6 +12,12 @@ Implementation note: this project uses original clean-room code in this reposito
 - Polling-based state refresh
 - Mock mode for UI testing before cloud endpoints are finalized
 
+Fan node status model:
+
+- Local fields are command-intent/display oriented: `ST` (Local Power), `GV0` (Local Speed)
+- Remote fields are cloud-readback/physical oriented: `GV1` (Remote Power), `GV2` (Remote Speed)
+- During command verification windows, local values may lead remote values briefly while cloud/physical state converges
+
 ## Files
 
 - `acinf_nodeserver.py`: PG3 controller + fan node logic
@@ -28,6 +34,13 @@ Set these in PG3 for the nodeserver:
 - `moredebug`: set to `1` to log extra AC Infinity request/response details
 
 Advanced values (`api_base_url`, `controller_type`, `device_id`, `port`, `user_agent`, `mock_mode`, and `api_token`) are handled internally with defaults and are intentionally not shown in the default PG3 custom parameter list.
+
+Hidden command verification tuning params (optional):
+
+- `verify_interval_s`: polling interval in seconds for command verification loop (default `2.0`, clamped `0.1`..`60.0`)
+- `verify_timeout_s`: max verification duration in seconds (default `30`, clamped `2`..`600`, and forced to be at least `verify_interval_s`)
+
+These are intentionally not in the default custom parameter list, but can be added manually in PG3 if you need to tune responsiveness.
 
 Node creation behavior:
 

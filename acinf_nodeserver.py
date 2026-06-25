@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import time
 import threading
 import traceback
 
@@ -7,7 +8,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.019"
+VERSION = "2026.6.031"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -22,20 +23,31 @@ except Exception:
 class ACInfinityFanNode(udi_interface.Node):
     id = "fan"
 
-    # ST = fan power (0/1), GV0 = fan speed level (0-10)
+    COMMAND_VERIFY_TIMEOUT_S = 30
+    COMMAND_VERIFY_INTERVAL_S = 2.0
+
+    # ST/GV0 are local intent state, GV1/GV2 are remote cloud-readback state.
     drivers = [
         {"driver": "ST", "value": 0, "uom": 25},
         {"driver": "GV0", "value": 0, "uom": 56},
+        {"driver": "GV1", "value": 0, "uom": 2},
+        {"driver": "GV2", "value": 0, "uom": 56},
     ]
 
-    def __init__(self, polyglot, primary, address, name, client):
+    def __init__(self, polyglot, primary, address, name, client, verify_timeout_s=None, verify_interval_s=None):
         super().__init__(polyglot, primary, address, name)
         self.client = client
         self._last_nonzero_speed = 10
         self._pending_speed_level = None
+        self.COMMAND_VERIFY_TIMEOUT_S = int(verify_timeout_s) if verify_timeout_s is not None else int(self.COMMAND_VERIFY_TIMEOUT_S)
+        self.COMMAND_VERIFY_INTERVAL_S = float(verify_interval_s) if verify_interval_s is not None else float(self.COMMAND_VERIFY_INTERVAL_S)
 
     def set_client(self, client):
         self.client = client
+
+    def set_verify_timing(self, timeout_s, interval_s):
+        self.COMMAND_VERIFY_TIMEOUT_S = max(2, int(timeout_s))
+        self.COMMAND_VERIFY_INTERVAL_S = max(0.1, float(interval_s))
 
     @staticmethod
     def _percent_to_level(speed_percent):
@@ -51,23 +63,113 @@ class ACInfinityFanNode(udi_interface.Node):
         speed_level = max(0, min(10, int(speed_level)))
         return speed_level
 
-    def _apply_state(self, state):
+    def _apply_state(self, state, remote_state=None):
         speed_level = self._percent_to_level(state.get("speed", 0))
-        remembered_level = speed_level
         is_on = bool(state.get("is_on", speed_level > 0))
-        if remembered_level > 0:
-            # Keep last known non-zero speed for next ON, even when currently OFF.
-            self._last_nonzero_speed = remembered_level
-        if not is_on:
-            speed_level = 0
+        cloud_state = remote_state if remote_state is not None else state
+        remote_speed_level = self._percent_to_level(cloud_state.get("speed", 0))
+        remote_is_on = bool(cloud_state.get("is_on", remote_speed_level > 0))
+        current_local_speed = int(self.getDriver("GV0"))
+
+        if is_on and speed_level > 0:
+            # Only trust cloud speed while fan is ON.
+            self._last_nonzero_speed = speed_level
+            display_speed = speed_level
+        else:
+            # Keep our local desired speed while OFF.
+            display_speed = max(0, current_local_speed)
 
         self.setDriver("ST", 1 if is_on else 0, report=True, force=True)
-        self.setDriver("GV0", speed_level, report=True, force=True)
+        self.setDriver("GV0", display_speed, report=True, force=True)
+        self.setDriver("GV1", 1 if remote_is_on else 0, report=True, force=True)
+        self.setDriver("GV2", remote_speed_level, report=True, force=True)
+
+    def _apply_state_with_expected_speed(self, state, expected_speed_level, remote_state=None):
+        """Apply cloud state while guarding against short ramp/readback lag.
+
+        Immediately after writes, controller can report ON with a temporary lower speed
+        while ramping. Keep the requested local speed in that case.
+        """
+        expected = max(0, min(10, int(expected_speed_level)))
+        observed = self._percent_to_level(state.get("speed", 0))
+        is_on = bool(state.get("is_on", observed > 0))
+        if is_on and expected > 0 and observed < expected:
+            guarded = dict(state)
+            guarded["speed"] = expected
+            self._apply_state(guarded, remote_state=remote_state)
+            return
+        self._apply_state(state, remote_state=remote_state)
+
+    def _await_expected_state(self, expected_is_on=None, expected_speed_level=None):
+        """Temporarily fast-poll cloud state until command outcome is observed.
+
+        Polls every COMMAND_VERIFY_INTERVAL_S seconds up to COMMAND_VERIFY_TIMEOUT_S
+        and stops immediately
+        when expected state is reached.
+        """
+        deadline = time.monotonic() + float(self.COMMAND_VERIFY_TIMEOUT_S)
+        interval = max(0.1, float(self.COMMAND_VERIFY_INTERVAL_S))
+        expected_speed = None if expected_speed_level is None else max(0, min(10, int(expected_speed_level)))
+        # While waiting for OFF confirmation, keep locally staged speed visible instead
+        # of transient cloud target rewrites (for example, 10) until spin-down completes.
+        hold_off_speed = None
+        optimistic_off = False
+        if expected_is_on is False and expected_speed is None:
+            hold_off_speed = max(0, min(10, int(self.getDriver("GV0"))))
+            optimistic_off = True
+        last_state = None
+
+        while True:
+            state = self.client.get_fan_state()
+            last_state = state
+
+            state_for_apply = state
+            if hold_off_speed is not None and bool(state.get("is_on", False)):
+                state_for_apply = dict(state)
+                state_for_apply["speed"] = hold_off_speed
+                if optimistic_off:
+                    # Treat DOF as immediately OFF in node state while cloud catches up.
+                    state_for_apply["is_on"] = False
+
+            if expected_speed is not None:
+                self._apply_state_with_expected_speed(state_for_apply, expected_speed, remote_state=state)
+            else:
+                self._apply_state(state_for_apply, remote_state=state)
+
+            observed_is_on = bool(state.get("is_on", False))
+            observed_speed = self._percent_to_level(state.get("speed", 0))
+
+            matched = True
+            if expected_is_on is not None and observed_is_on != bool(expected_is_on):
+                matched = False
+            if expected_speed is not None and observed_speed != expected_speed:
+                matched = False
+
+            if matched:
+                LOGGER.debug(
+                    "Command verification complete: expected_is_on=%s expected_speed=%s observed_state=%s",
+                    expected_is_on,
+                    expected_speed,
+                    state,
+                )
+                return True
+
+            if time.monotonic() >= deadline:
+                LOGGER.error(
+                    "Command verification timeout after %ss. expected_is_on=%s expected_speed=%s last_state=%s",
+                    self.COMMAND_VERIFY_TIMEOUT_S,
+                    expected_is_on,
+                    expected_speed,
+                    last_state,
+                )
+                return False
+
+            time.sleep(interval)
 
     def query(self, command=None):
         try:
             state = self.client.get_fan_state()
-            self._apply_state(state)
+            self._apply_state(state, remote_state=state)
         except Exception as exc:
             LOGGER.error("Fan query failed: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -75,11 +177,18 @@ class ACInfinityFanNode(udi_interface.Node):
 
     def cmd_on(self, command):
         try:
-            target_level = self._pending_speed_level if self._pending_speed_level is not None else self._last_nonzero_speed
+            local_level = int(self.getDriver("GV0"))
+            if self._pending_speed_level is not None:
+                target_level = self._pending_speed_level
+            elif local_level > 0:
+                # Honor locally staged speed (survives OFF state and restarts).
+                target_level = local_level
+            else:
+                target_level = self._last_nonzero_speed
             target_level = max(1, min(10, int(target_level)))
-            state = self.client.set_power(True, speed_preference=self._level_to_percent(target_level))
+            self.client.set_power(True, speed_preference=self._level_to_percent(target_level))
             self._pending_speed_level = None
-            self._apply_state(state)
+            self._await_expected_state(expected_is_on=True, expected_speed_level=target_level)
         except Exception as exc:
             LOGGER.error("Failed to turn fan on: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -90,8 +199,10 @@ class ACInfinityFanNode(udi_interface.Node):
             current_speed = int(self.getDriver("GV0"))
             if current_speed > 0:
                 self._last_nonzero_speed = current_speed
-            state = self.client.set_power(False)
-            self._apply_state(state)
+            # Immediately reflect OFF intent locally, then verify cloud convergence.
+            self.setDriver("ST", 0, report=True, force=True)
+            self.client.set_power(False)
+            self._await_expected_state(expected_is_on=False)
         except Exception as exc:
             LOGGER.error("Failed to turn fan off: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -121,13 +232,16 @@ class ACInfinityFanNode(udi_interface.Node):
 
             is_on = int(self.getDriver("ST")) == 1
             if is_on:
-                # When fan is ON, send explicit ON + speed to keep cloud/device in sync.
-                state = self.client.set_power(True, speed_preference=self._level_to_percent(speed_level))
-                self._apply_state(state)
-                LOGGER.debug("Speed update applied while ON (power+speed): level=%s", speed_level)
+                # If currently ON, apply speed to cloud and verify expected status.
+                self.client.set_speed(self._level_to_percent(speed_level))
+                if speed_level == 0:
+                    self._await_expected_state(expected_is_on=False)
+                else:
+                    self._await_expected_state(expected_is_on=True, expected_speed_level=speed_level)
+                LOGGER.debug("Speed update applied while ON and verification loop completed: level=%s", speed_level)
             else:
-                # While OFF, keep local speed only; apply to cloud on next DON.
-                LOGGER.debug("Speed update deferred while OFF: level=%s", speed_level)
+                # While OFF, keep speed local only; apply on next DON.
+                LOGGER.debug("Speed update stored locally only while OFF: level=%s", speed_level)
         except Exception as exc:
             LOGGER.error("Failed to set fan speed: %s", exc)
             LOGGER.debug(traceback.format_exc())
@@ -160,6 +274,8 @@ class ACInfinityController(udi_interface.Node):
         self._client_lock = threading.RLock()
         self._last_login_gate_reason = None
         self._login_ready_logged = False
+        self._verify_timeout_s = ACInfinityFanNode.COMMAND_VERIFY_TIMEOUT_S
+        self._verify_interval_s = ACInfinityFanNode.COMMAND_VERIFY_INTERVAL_S
 
         self.poly.subscribe(self.poly.START, self.start, address)
         self.poly.subscribe(self.poly.CUSTOMPARAMS, self.parameter_handler)
@@ -239,9 +355,40 @@ class ACInfinityController(udi_interface.Node):
         has_creds = bool(api_token or (email and password))
         return not has_creds
 
+    @staticmethod
+    def _parse_int_param(params, key, default, minimum, maximum):
+        try:
+            value = int(float(params.get(key, default)))
+        except (TypeError, ValueError):
+            value = int(default)
+        return max(minimum, min(maximum, value))
+
+    @staticmethod
+    def _parse_float_param(params, key, default, minimum, maximum):
+        try:
+            value = float(params.get(key, default))
+        except (TypeError, ValueError):
+            value = float(default)
+        return max(minimum, min(maximum, value))
+
+    def _update_verify_timing_from_params(self, params):
+        # Hidden tuning knobs (optional): verify_interval_s, verify_timeout_s
+        interval_s = self._parse_float_param(params, "verify_interval_s", 2.0, 0.1, 60.0)
+        timeout_s = self._parse_int_param(params, "verify_timeout_s", 30, 2, 600)
+        if timeout_s < interval_s:
+            timeout_s = int(interval_s)
+        self._verify_interval_s = interval_s
+        self._verify_timeout_s = timeout_s
+        LOGGER.debug(
+            "Command verify timing set: interval=%ss timeout=%ss",
+            self._verify_interval_s,
+            self._verify_timeout_s,
+        )
+
     def _build_client(self, params=None):
         p = params if params is not None else self.Parameters
         self._log_cloud_warnings(p)
+        self._update_verify_timing_from_params(p)
         controller_type = str(p.get("controller_type", "controller69")).strip() or "controller69"
         LOGGER.info("Controller profile: %s", controller_type)
         user = p.get("user", "")
@@ -261,10 +408,19 @@ class ACInfinityController(udi_interface.Node):
     def _ensure_fan_node(self):
         node = self.poly.getNode("acifan1")
         if node is None:
-            node = ACInfinityFanNode(self.poly, self.address, "acifan1", "AC Infinity Fan", self.client)
+            node = ACInfinityFanNode(
+                self.poly,
+                self.address,
+                "acifan1",
+                "AC Infinity Fan",
+                self.client,
+                verify_timeout_s=self._verify_timeout_s,
+                verify_interval_s=self._verify_interval_s,
+            )
             self.poly.addNode(node)
         else:
             node.set_client(self.client)
+            node.set_verify_timing(self._verify_timeout_s, self._verify_interval_s)
         return node
 
     def _login_ready(self):

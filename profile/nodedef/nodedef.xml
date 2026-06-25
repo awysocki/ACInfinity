@@ -20,6 +20,8 @@
     <sts>
       <st id="ST" editor="ONOFFBOOL" />
       <st id="GV0" editor="SPEED10" />
+      <st id="GV1" editor="ONOFFBOOL" />
+      <st id="GV2" editor="SPEED10" />
     </sts>
     <cmds>
       <sends />
