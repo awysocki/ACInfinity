@@ -7,7 +7,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.016"
+VERSION = "2026.6.018"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -22,10 +22,10 @@ except Exception:
 class ACInfinityFanNode(udi_interface.Node):
     id = "fan"
 
-    # ST = fan speed level (0-10), GV0 = power (0/1)
+    # ST = fan power (0/1), GV0 = fan speed level (0-10)
     drivers = [
-        {"driver": "ST", "value": 0, "uom": 56},
-        {"driver": "GV0", "value": 0, "uom": 78},
+        {"driver": "ST", "value": 0, "uom": 2},
+        {"driver": "GV0", "value": 0, "uom": 56},
     ]
 
     def __init__(self, polyglot, primary, address, name, client):
@@ -61,8 +61,8 @@ class ACInfinityFanNode(udi_interface.Node):
         if not is_on:
             speed_level = 0
 
-        self.setDriver("ST", speed_level, report=True, force=True)
-        self.setDriver("GV0", 1 if is_on else 0, report=True, force=True)
+        self.setDriver("ST", 1 if is_on else 0, report=True, force=True)
+        self.setDriver("GV0", speed_level, report=True, force=True)
 
     def query(self, command=None):
         try:
@@ -87,7 +87,7 @@ class ACInfinityFanNode(udi_interface.Node):
 
     def cmd_off(self, command):
         try:
-            current_speed = int(self.getDriver("ST"))
+            current_speed = int(self.getDriver("GV0"))
             if current_speed > 0:
                 self._last_nonzero_speed = current_speed
             state = self.client.set_power(False)
@@ -117,9 +117,9 @@ class ACInfinityFanNode(udi_interface.Node):
                 self._last_nonzero_speed = speed_level
             # Keep speed as its own desired value regardless of current power state.
             self._pending_speed_level = speed_level if speed_level > 0 else None
-            self.setDriver("ST", speed_level, report=True, force=True)
+            self.setDriver("GV0", speed_level, report=True, force=True)
 
-            is_on = int(self.getDriver("GV0")) == 1
+            is_on = int(self.getDriver("ST")) == 1
             if is_on:
                 # When fan is ON, send explicit ON + speed to keep cloud/device in sync.
                 state = self.client.set_power(True, speed_preference=self._level_to_percent(speed_level))

@@ -15,8 +15,8 @@ ST-ctl-GV1-NAME = Rev Year
 ST-ctl-GV2-NAME = Rev Mon
 ST-ctl-GV3-NAME = Revision
 ST-ctl-GV4-NAME = Ports Connected
-ST-fan-ST-NAME = Fan Speed
-ST-fan-GV0-NAME = FAN
+ST-fan-ST-NAME = FAN
+ST-fan-GV0-NAME = Fan Speed
 
 CMD-controller-QUERY-NAME = Query
 CMD-ctl-QUERY-NAME = Query
@@ -25,3 +25,4 @@ CMD-fan-DOF-NAME = Off
 CMD-fan-SETSPD-NAME = Set Speed
 CMD-fan-QUERY-NAME = Query
 CMDP-fan-SETSPD-SPD-NAME = Speed
+CMDP-SPEED10-SPD-NAME = Speed
