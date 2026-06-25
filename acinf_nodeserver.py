@@ -7,7 +7,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.012"
+VERSION = "2026.6.015"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -25,7 +25,7 @@ class ACInfinityFanNode(udi_interface.Node):
     # ST = fan speed level (0-10), GV0 = power (0/1)
     drivers = [
         {"driver": "ST", "value": 0, "uom": 56},
-        {"driver": "GV0", "value": 0, "uom": 2},
+        {"driver": "GV0", "value": 0, "uom": 25},
     ]
 
     def __init__(self, polyglot, primary, address, name, client):
@@ -115,16 +115,18 @@ class ACInfinityFanNode(udi_interface.Node):
             speed_level = max(0, min(10, speed_level))
             if speed_level > 0:
                 self._last_nonzero_speed = speed_level
+            # Keep speed as its own desired value regardless of current power state.
+            self._pending_speed_level = speed_level if speed_level > 0 else None
+            self.setDriver("ST", speed_level, report=True, force=True)
+
             is_on = int(self.getDriver("GV0")) == 1
             if is_on:
-                state = self.client.set_speed(self._level_to_percent(speed_level))
-                self._pending_speed_level = None
+                # When fan is ON, send explicit ON + speed to keep cloud/device in sync.
+                state = self.client.set_power(True, speed_preference=self._level_to_percent(speed_level))
                 self._apply_state(state)
-                LOGGER.debug("Speed update applied immediately: level=%s", speed_level)
+                LOGGER.debug("Speed update applied while ON (power+speed): level=%s", speed_level)
             else:
-                # Keep local speed preference while off; apply to cloud on next DON.
-                self._pending_speed_level = speed_level if speed_level > 0 else None
-                self.setDriver("ST", speed_level, report=True, force=True)
+                # While OFF, keep local speed only; apply to cloud on next DON.
                 LOGGER.debug("Speed update deferred while OFF: level=%s", speed_level)
         except Exception as exc:
             LOGGER.error("Failed to set fan speed: %s", exc)
@@ -338,9 +340,10 @@ class ACInfinityController(udi_interface.Node):
         LOGGER.info("Stopping AC Infinity nodeserver")
 
     def poll(self, poll_type):
-        # Keep IoX in sync with controller/hardware changes on every poll.
-        with self._client_lock:
-            self._sync_on_poll()
+        # Re-sync cloud/controller state on long poll, and while waiting for initial node creation.
+        if poll_type == "longPoll" or self.poly.getNode("acifan1") is None:
+            with self._client_lock:
+                self._sync_on_poll()
 
     def query(self, command=None):
         with self._client_lock:

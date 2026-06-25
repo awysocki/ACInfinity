@@ -6,13 +6,13 @@ ND-fan-NAME = AC Infinity Fan
 ND-fan-ICON = GenericFan
 
 ST-controller-ST-NAME = Node Server Online
-ST-controller-GV1-NAME = Year
-ST-controller-GV2-NAME = Mon
+ST-controller-GV1-NAME = Rev Year
+ST-controller-GV2-NAME = Rev Mon
 ST-controller-GV3-NAME = Revision
 ST-controller-GV4-NAME = Ports Connected
 ST-ctl-ST-NAME = Node Server Online
-ST-ctl-GV1-NAME = Year
-ST-ctl-GV2-NAME = Mon
+ST-ctl-GV1-NAME = Rev Year
+ST-ctl-GV2-NAME = Rev Mon
 ST-ctl-GV3-NAME = Revision
 ST-ctl-GV4-NAME = Ports Connected
 ST-fan-ST-NAME = Fan Speed

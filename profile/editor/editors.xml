@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <editors>
-  <editor id="FANONOFF">
+  <editor id="ONOFFBOOL">
     <range uom="2" subset="0,1" nls="0=OFF;1=ON" />
+  </editor>
+
+  <editor id="FANONOFF">
+    <range uom="25" subset="0,1" nls="0=OFF;1=ON" />
   </editor>
 
   <editor id="PERCENT">
