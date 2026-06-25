@@ -7,7 +7,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.015"
+VERSION = "2026.6.016"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -25,7 +25,7 @@ class ACInfinityFanNode(udi_interface.Node):
     # ST = fan speed level (0-10), GV0 = power (0/1)
     drivers = [
         {"driver": "ST", "value": 0, "uom": 56},
-        {"driver": "GV0", "value": 0, "uom": 25},
+        {"driver": "GV0", "value": 0, "uom": 78},
     ]
 
     def __init__(self, polyglot, primary, address, name, client):

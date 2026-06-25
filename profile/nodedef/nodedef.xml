@@ -18,8 +18,8 @@
 
   <nodeDef id="fan" nls="fan">
     <sts>
-      <st id="ST" editor="SPEED10" />
-      <st id="GV0" editor="FANONOFF" />
+      <st id="ST" editor="ONOFFBOOL" />
+      <st id="GV0" editor="SPEED10" />
     </sts>
     <cmds>
       <sends />
@@ -27,7 +27,7 @@
         <cmd id="DON" />
         <cmd id="DOF" />
         <cmd id="SETSPD">
-          <p id="SPD" editor="SPEED10" init="ST" />
+          <p id="SPD" editor="SPEED10" init="GV0" />
         </cmd>
         <cmd id="QUERY" />
       </accepts>

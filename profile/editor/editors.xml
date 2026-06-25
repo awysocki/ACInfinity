@@ -5,7 +5,7 @@
   </editor>
 
   <editor id="FANONOFF">
-    <range uom="25" subset="0,1" nls="0=OFF;1=ON" />
+    <range uom="78" subset="0,1" nls="0=OFF;1=ON" />
   </editor>
 
   <editor id="PERCENT">
