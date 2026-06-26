@@ -17,6 +17,7 @@ Fan node status model:
 - Local fields are command-intent/display oriented: `ST` (Local Power), `GV0` (Local Speed)
 - Remote fields are cloud-readback/physical oriented: `GV1` (Remote Power), `GV2` (Remote Speed)
 - During command verification windows, local values may lead remote values briefly while cloud/physical state converges
+- DON/DOF are both optimistic locally: local power updates immediately to reflect intent, while remote fields confirm actual cloud/physical progression and final state
 
 ## Files
 

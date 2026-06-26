@@ -18,9 +18,9 @@
 
   <nodeDef id="fan" nls="fan">
     <sts>
-      <st id="ST" editor="ONOFFBOOL" />
+      <st id="ST" editor="ST_ONOFF" />
       <st id="GV0" editor="SPEED10" />
-      <st id="GV1" editor="ONOFFBOOL" />
+      <st id="GV1" editor="ST_ONOFF" />
       <st id="GV2" editor="SPEED10" />
     </sts>
     <cmds>

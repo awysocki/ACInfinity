@@ -8,7 +8,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.031"
+VERSION = "2026.6.035"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -27,20 +27,34 @@ class ACInfinityFanNode(udi_interface.Node):
     COMMAND_VERIFY_INTERVAL_S = 2.0
 
     # ST/GV0 are local intent state, GV1/GV2 are remote cloud-readback state.
-    drivers = [
+    DEFAULT_DRIVERS = [
         {"driver": "ST", "value": 0, "uom": 25},
         {"driver": "GV0", "value": 0, "uom": 56},
-        {"driver": "GV1", "value": 0, "uom": 2},
+        {"driver": "GV1", "value": 0, "uom": 25},
         {"driver": "GV2", "value": 0, "uom": 56},
     ]
+    drivers = [dict(d) for d in DEFAULT_DRIVERS]
 
     def __init__(self, polyglot, primary, address, name, client, verify_timeout_s=None, verify_interval_s=None):
         super().__init__(polyglot, primary, address, name)
+        self.drivers = [dict(d) for d in self.drivers]
+        self._ensure_driver_definitions()
         self.client = client
         self._last_nonzero_speed = 10
         self._pending_speed_level = None
         self.COMMAND_VERIFY_TIMEOUT_S = int(verify_timeout_s) if verify_timeout_s is not None else int(self.COMMAND_VERIFY_TIMEOUT_S)
         self.COMMAND_VERIFY_INTERVAL_S = float(verify_interval_s) if verify_interval_s is not None else float(self.COMMAND_VERIFY_INTERVAL_S)
+
+    def _ensure_driver_definitions(self):
+        existing = {str(d.get("driver")) for d in self.drivers if isinstance(d, dict)}
+        added = []
+        for spec in self.DEFAULT_DRIVERS:
+            name = str(spec.get("driver"))
+            if name not in existing:
+                self.drivers.append(dict(spec))
+                added.append(name)
+        if added:
+            LOGGER.info("%s repaired missing drivers: %s", self.address, ", ".join(added))
 
     def set_client(self, client):
         self.client = client
@@ -114,9 +128,12 @@ class ACInfinityFanNode(udi_interface.Node):
         # of transient cloud target rewrites (for example, 10) until spin-down completes.
         hold_off_speed = None
         optimistic_off = False
+        optimistic_on = False
         if expected_is_on is False and expected_speed is None:
             hold_off_speed = max(0, min(10, int(self.getDriver("GV0"))))
             optimistic_off = True
+        if expected_is_on is True:
+            optimistic_on = True
         last_state = None
 
         while True:
@@ -130,6 +147,11 @@ class ACInfinityFanNode(udi_interface.Node):
                 if optimistic_off:
                     # Treat DOF as immediately OFF in node state while cloud catches up.
                     state_for_apply["is_on"] = False
+            elif optimistic_on and not bool(state.get("is_on", False)):
+                state_for_apply = dict(state)
+                state_for_apply["is_on"] = True
+                if expected_speed is not None and expected_speed > 0:
+                    state_for_apply["speed"] = expected_speed
 
             if expected_speed is not None:
                 self._apply_state_with_expected_speed(state_for_apply, expected_speed, remote_state=state)
@@ -186,6 +208,9 @@ class ACInfinityFanNode(udi_interface.Node):
             else:
                 target_level = self._last_nonzero_speed
             target_level = max(1, min(10, int(target_level)))
+            # Immediately reflect ON intent locally; remote fields continue to show cloud readback.
+            self.setDriver("ST", 1, report=True, force=True)
+            self.setDriver("GV0", target_level, report=True, force=True)
             self.client.set_power(True, speed_preference=self._level_to_percent(target_level))
             self._pending_speed_level = None
             self._await_expected_state(expected_is_on=True, expected_speed_level=target_level)
@@ -258,16 +283,19 @@ class ACInfinityFanNode(udi_interface.Node):
 class ACInfinityController(udi_interface.Node):
     id = "controller"
 
-    drivers = [
+    DEFAULT_DRIVERS = [
         {"driver": "ST", "value": 1, "uom": 2},
         {"driver": "GV1", "value": VERSION_YEAR, "uom": 25},
         {"driver": "GV2", "value": VERSION_MONTH, "uom": 25},
         {"driver": "GV3", "value": VERSION_REVISION, "uom": 25},
         {"driver": "GV4", "value": 0, "uom": 25},
     ]
+    drivers = [dict(d) for d in DEFAULT_DRIVERS]
 
     def __init__(self, polyglot, primary, address, name):
         super().__init__(polyglot, primary, address, name)
+        self.drivers = [dict(d) for d in self.drivers]
+        self._ensure_driver_definitions()
         self.poly = polyglot
         self.Parameters = udi_interface.Custom(polyglot, "customparams")
         self.client = None
@@ -281,6 +309,17 @@ class ACInfinityController(udi_interface.Node):
         self.poly.subscribe(self.poly.CUSTOMPARAMS, self.parameter_handler)
         self.poly.subscribe(self.poly.POLL, self.poll)
         self.poly.subscribe(self.poly.STOP, self.stop)
+
+    def _ensure_driver_definitions(self):
+        existing = {str(d.get("driver")) for d in self.drivers if isinstance(d, dict)}
+        added = []
+        for spec in self.DEFAULT_DRIVERS:
+            name = str(spec.get("driver"))
+            if name not in existing:
+                self.drivers.append(dict(spec))
+                added.append(name)
+        if added:
+            LOGGER.info("%s repaired missing drivers: %s", self.address, ", ".join(added))
 
     def _seed_required_custom_params(self):
         required = {
