@@ -2,7 +2,7 @@
 <nodeDefs>
   <nodeDef id="controller" nls="ctl">
     <sts>
-      <st id="ST" editor="ONOFFBOOL" />
+      <st id="ST" editor="ST_ONOFF" />
       <st id="GV1" editor="NSYEAR" />
       <st id="GV2" editor="NSMON" />
       <st id="GV3" editor="NSREV" />

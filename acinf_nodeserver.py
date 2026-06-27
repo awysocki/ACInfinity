@@ -8,7 +8,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.035"
+VERSION = "2026.6.037"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -284,7 +284,7 @@ class ACInfinityController(udi_interface.Node):
     id = "controller"
 
     DEFAULT_DRIVERS = [
-        {"driver": "ST", "value": 1, "uom": 2},
+        {"driver": "ST", "value": 1, "uom": 25},
         {"driver": "GV1", "value": VERSION_YEAR, "uom": 25},
         {"driver": "GV2", "value": VERSION_MONTH, "uom": 25},
         {"driver": "GV3", "value": VERSION_REVISION, "uom": 25},
