@@ -7,6 +7,9 @@
       <st id="GV2" editor="NSMON" />
       <st id="GV3" editor="NSREV" />
       <st id="GV4" editor="PORTCOUNT" />
+      <st id="GV5" editor="TEMP_C_1D" />
+      <st id="GV6" editor="PERCENT_1D" />
+      <st id="GV7" editor="KPA_2D" />
     </sts>
     <cmds>
       <sends />

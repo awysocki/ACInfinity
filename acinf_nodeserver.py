@@ -8,7 +8,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.037"
+VERSION = "2026.6.045"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -289,8 +289,16 @@ class ACInfinityController(udi_interface.Node):
         {"driver": "GV2", "value": VERSION_MONTH, "uom": 25},
         {"driver": "GV3", "value": VERSION_REVISION, "uom": 25},
         {"driver": "GV4", "value": 0, "uom": 25},
+        {"driver": "GV5", "value": 0, "uom": 4},
+        {"driver": "GV6", "value": 0, "uom": 51},
+        {"driver": "GV7", "value": 0, "uom": 25},
     ]
     drivers = [dict(d) for d in DEFAULT_DRIVERS]
+
+    @staticmethod
+    def _normalize_temp_unit(value):
+        # Only explicit F/f enables Fahrenheit conversion; anything else defaults to C.
+        return "F" if str(value).strip().lower() == "f" else "C"
 
     def __init__(self, polyglot, primary, address, name):
         super().__init__(polyglot, primary, address, name)
@@ -302,6 +310,10 @@ class ACInfinityController(udi_interface.Node):
         self._client_lock = threading.RLock()
         self._last_login_gate_reason = None
         self._login_ready_logged = False
+        self._last_logged_temperature_c = None
+        self._last_logged_humidity = None
+        self._last_logged_vpd_kpa = None
+        self._temp_display_unit = "C"
         self._verify_timeout_s = ACInfinityFanNode.COMMAND_VERIFY_TIMEOUT_S
         self._verify_interval_s = ACInfinityFanNode.COMMAND_VERIFY_INTERVAL_S
 
@@ -428,8 +440,10 @@ class ACInfinityController(udi_interface.Node):
         p = params if params is not None else self.Parameters
         self._log_cloud_warnings(p)
         self._update_verify_timing_from_params(p)
+        self._temp_display_unit = self._normalize_temp_unit(p.get("temp_unit", "C"))
         controller_type = str(p.get("controller_type", "controller69")).strip() or "controller69"
         LOGGER.info("Controller profile: %s", controller_type)
+        LOGGER.info("Temperature display unit: %s", self._temp_display_unit)
         user = p.get("user", "")
         email = p.get("email", user)
         self.client = ACInfinityCloudClient(
@@ -445,19 +459,34 @@ class ACInfinityController(udi_interface.Node):
         )
 
     def _ensure_fan_node(self):
+        try:
+            port_label = int(self.client.port)
+        except Exception:
+            port_label = 1
+        desired_name = f"AC Infinity Fan {port_label}"
+
         node = self.poly.getNode("acifan1")
         if node is None:
             node = ACInfinityFanNode(
                 self.poly,
                 self.address,
                 "acifan1",
-                "AC Infinity Fan",
+                desired_name,
                 self.client,
                 verify_timeout_s=self._verify_timeout_s,
                 verify_interval_s=self._verify_interval_s,
             )
             self.poly.addNode(node)
         else:
+            # Keep runtime node object label aligned with configured port.
+            if getattr(node, "name", None) != desired_name:
+                node.name = desired_name
+                # Ask Polyglot to apply the name update for existing node.
+                try:
+                    node.rename = True
+                    self.poly.addNode(node)
+                except Exception:
+                    LOGGER.debug("Fan node rename update could not be applied immediately")
             node.set_client(self.client)
             node.set_verify_timing(self._verify_timeout_s, self._verify_interval_s)
         return node
@@ -494,6 +523,19 @@ class ACInfinityController(udi_interface.Node):
         if not self._login_ready():
             return False
 
+        try:
+            preferred_port = int(self.client.get_preferred_active_port())
+            if preferred_port > 0 and int(self.client.port) != preferred_port:
+                LOGGER.info(
+                    "Aligning runtime fan port to cloud active port: %s -> %s",
+                    self.client.port,
+                    preferred_port,
+                )
+                self.client.port = preferred_port
+        except Exception as exc:
+            LOGGER.warning("Failed to align fan port from cloud telemetry: %s", exc)
+            LOGGER.debug(traceback.format_exc())
+
         fan = self._ensure_fan_node()
         fan.query()
         self.setDriver("GV1", VERSION_YEAR, report=True, force=True)
@@ -508,6 +550,54 @@ class ACInfinityController(udi_interface.Node):
             LOGGER.warning("Failed to update controller port count: %s", exc)
             LOGGER.debug(traceback.format_exc())
             self.setDriver("GV4", 0, report=True, force=True)
+
+        try:
+            env = self.client.get_controller_environment()
+            temp_c = env.get("temperature_c")
+            humidity = env.get("humidity")
+            vpd_kpa = env.get("vpd_kpa")
+
+            if temp_c is not None:
+                temp_value = float(temp_c)
+                temp_uom = 4
+                if self._temp_display_unit == "F":
+                    temp_value = (temp_value * 9.0 / 5.0) + 32.0
+                    temp_uom = 17
+                temp_rounded = round(temp_value, 1)
+                self.setDriver("GV5", temp_rounded, uom=temp_uom, report=True, force=True)
+            else:
+                temp_rounded = None
+
+            if humidity is not None:
+                humidity_rounded = round(max(0.0, min(100.0, float(humidity))), 1)
+                self.setDriver("GV6", humidity_rounded, report=True, force=True)
+            else:
+                humidity_rounded = None
+
+            if vpd_kpa is not None:
+                vpd_rounded = round(max(0.0, min(10.0, float(vpd_kpa))), 2)
+                self.setDriver("GV7", vpd_rounded, report=True, force=True)
+            else:
+                vpd_rounded = None
+
+            if (
+                temp_rounded != self._last_logged_temperature_c
+                or humidity_rounded != self._last_logged_humidity
+                or vpd_rounded != self._last_logged_vpd_kpa
+            ):
+                LOGGER.info(
+                    "Controller sensors: temperature_%s=%s humidity=%s vpd_kpa=%s",
+                    self._temp_display_unit.lower(),
+                    temp_rounded,
+                    humidity_rounded,
+                    vpd_rounded,
+                )
+                self._last_logged_temperature_c = temp_rounded
+                self._last_logged_humidity = humidity_rounded
+                self._last_logged_vpd_kpa = vpd_rounded
+        except Exception as exc:
+            LOGGER.warning("Failed to update controller sensors: %s", exc)
+            LOGGER.debug(traceback.format_exc())
         return True
 
     def _sync_on_poll(self):
@@ -535,8 +625,9 @@ class ACInfinityController(udi_interface.Node):
         LOGGER.info("Stopping AC Infinity nodeserver")
 
     def poll(self, poll_type):
-        # Re-sync cloud/controller state on long poll, and while waiting for initial node creation.
-        if poll_type == "longPoll" or self.poly.getNode("acifan1") is None:
+        # Re-sync cloud/controller state on short poll.
+        # Keep bootstrap behavior while waiting for initial fan node creation.
+        if poll_type == "shortPoll" or self.poly.getNode("acifan1") is None:
             with self._client_lock:
                 self._sync_on_poll()
 
@@ -544,7 +635,7 @@ class ACInfinityController(udi_interface.Node):
         with self._client_lock:
             self._sync_nodes_after_login()
         self.setDriver("ST", 1, report=True, force=True)
-        # GV1/GV2/GV3 version and GV4 port count are maintained by _sync_nodes_after_login().
+        # Version, port count, and controller sensor drivers are maintained by _sync_nodes_after_login().
         return True
 
     commands = {

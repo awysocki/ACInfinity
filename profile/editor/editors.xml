@@ -4,12 +4,20 @@
     <range uom="25" min="0" max="1" step="1" nls="ST_ONOFF" />
   </editor>
 
-  <editor id="PERCENT">
-    <range uom="51" min="0" max="100" prec="0" />
-  </editor>
-
   <editor id="SPEED10">
     <range uom="56" min="0" max="10" prec="0" />
+  </editor>
+
+  <editor id="TEMP_C_1D">
+    <range uom="4" min="-40" max="100" prec="1" />
+  </editor>
+
+  <editor id="PERCENT_1D">
+    <range uom="51" min="0" max="100" prec="1" />
+  </editor>
+
+  <editor id="KPA_2D">
+    <range uom="25" min="0" max="10" prec="2" />
   </editor>
 
   <editor id="NSYEAR">

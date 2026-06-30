@@ -42,6 +42,8 @@ class ACInfinityCloudClient:
         self._mock_state = {
             "is_on": False,
             "speed": 0,
+            "temperature_c": None,
+            "humidity": None,
         }
 
     @staticmethod
@@ -220,12 +222,295 @@ class ACInfinityCloudClient:
         LOGGER.debug("AC Infinity connected port count: %s", connected)
         return connected
 
+    def get_preferred_active_port(self):
+        """Return best cloud-indicated active port for this controller.
+
+        Preference order:
+        1) deviceInfo.masterPort when valid
+        2) first connected/online port from ports list
+        3) current configured port
+        """
+        if self.mock_mode:
+            return int(self.port)
+
+        self._ensure_cloud_ready()
+        body = self._post(
+            self.API_URL_GET_DEVICE_INFO_LIST_ALL,
+            {"userId": self.api_token},
+            include_token=True,
+        )
+        devices = body.get("data", [])
+        if not isinstance(devices, list) or not devices:
+            return int(self.port)
+
+        target = None
+        for device in devices:
+            if str(device.get("devId", "")).strip() == str(self.device_id):
+                target = device
+                break
+        if target is None:
+            target = devices[0]
+
+        device_info = target.get("deviceInfo") or {}
+        master_port = self._to_int(device_info.get("masterPort"), default=0)
+        if master_port > 0:
+            LOGGER.debug("AC Infinity preferred port from masterPort: %s", master_port)
+            return master_port
+
+        ports = device_info.get("ports") or target.get("ports") or []
+        if isinstance(ports, list):
+            for port in ports:
+                if not isinstance(port, dict):
+                    continue
+                resistance = self._to_int(port.get("portResistance"), default=65535)
+                online = self._to_int(port.get("online"), default=0)
+                load_state = self._to_int(port.get("loadState"), default=0)
+                port_id = self._to_int(
+                    port.get("port") or port.get("externalPort") or port.get("portId"),
+                    default=0,
+                )
+                if port_id > 0 and (resistance != 65535 or online == 1 or load_state == 1):
+                    LOGGER.debug("AC Infinity preferred port from ports list: %s", port_id)
+                    return port_id
+
+        return int(self.port)
+
     @staticmethod
     def _to_int(value, default=0):
         try:
             return int(float(value))
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _to_float(value, default=None):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _iter_key_values(data):
+        if isinstance(data, dict):
+            for key, value in data.items():
+                yield str(key), value
+                if isinstance(value, (dict, list)):
+                    for nested_key, nested_value in ACInfinityCloudClient._iter_key_values(value):
+                        yield f"{key}.{nested_key}", nested_value
+        elif isinstance(data, list):
+            for index, value in enumerate(data):
+                key = str(index)
+                yield key, value
+                if isinstance(value, (dict, list)):
+                    for nested_key, nested_value in ACInfinityCloudClient._iter_key_values(value):
+                        yield f"{key}.{nested_key}", nested_value
+
+    @staticmethod
+    def _extract_temperature_c(data):
+        if not isinstance(data, (dict, list)):
+            return None
+
+        def _valid_c(value):
+            return value is not None and -50.0 <= value <= 100.0
+
+        def _valid_f(value):
+            return value is not None and -58.0 <= value <= 212.0
+
+        def _to_c_from_f(value_f):
+            return (value_f - 32.0) * (5.0 / 9.0)
+
+        def _normalize_c(raw):
+            numeric = ACInfinityCloudClient._to_float(raw)
+            if numeric is None:
+                return None
+            if _valid_c(numeric):
+                return numeric
+            scaled = numeric / 100.0
+            if _valid_c(scaled):
+                return scaled
+            return None
+
+        def _normalize_f(raw):
+            numeric = ACInfinityCloudClient._to_float(raw)
+            if numeric is None:
+                return None
+            if _valid_f(numeric):
+                return _to_c_from_f(numeric)
+            scaled = numeric / 100.0
+            if _valid_f(scaled):
+                return _to_c_from_f(scaled)
+            return None
+
+        preferred_c = []
+        preferred_f = []
+        fallback_c = []
+        fallback_f = []
+
+        for key, value in ACInfinityCloudClient._iter_key_values(data):
+            key_l = key.lower()
+            if "temp" not in key_l and "temperature" not in key_l:
+                continue
+
+            leaf = key_l.rsplit(".", 1)[-1]
+            if leaf.startswith("target"):
+                continue
+
+            if leaf in ("temperature", "temp", "insidetemp", "outsidetemp"):
+                preferred_c.append(value)
+                continue
+            if leaf in ("temperaturec", "tempc", "insidetempc", "outsidetempc"):
+                preferred_c.append(value)
+                continue
+            if leaf in ("temperaturef", "tempf", "insidetempf", "outsidetempf"):
+                preferred_f.append(value)
+                continue
+
+            if any(token in key_l for token in ("tempc", "temperaturec", "_c", ".c", "celsius")):
+                fallback_c.append(value)
+                continue
+            if any(token in key_l for token in ("tempf", "temperaturef", "_f", ".f", "fahrenheit")):
+                fallback_f.append(value)
+                continue
+
+            fallback_c.append(value)
+
+        for candidate in preferred_c:
+            normalized = _normalize_c(candidate)
+            if normalized is not None:
+                return normalized
+
+        for candidate in preferred_f:
+            normalized = _normalize_f(candidate)
+            if normalized is not None:
+                return normalized
+
+        for candidate in fallback_c:
+            normalized = _normalize_c(candidate)
+            if normalized is not None:
+                return normalized
+
+        for candidate in fallback_f:
+            normalized = _normalize_f(candidate)
+            if normalized is not None:
+                return normalized
+
+        return None
+
+    @staticmethod
+    def _extract_humidity_percent(data):
+        if not isinstance(data, (dict, list)):
+            return None
+
+        preferred = []
+        fallback = []
+
+        for key, value in ACInfinityCloudClient._iter_key_values(data):
+            key_l = key.lower()
+            leaf = key_l.rsplit(".", 1)[-1]
+
+            if leaf.startswith("target"):
+                continue
+
+            if leaf in ("humidity", "humi", "rh"):
+                preferred.append(value)
+                continue
+
+            if "humid" in key_l or "humi" in key_l or leaf == "rh" or key_l.endswith(".rh"):
+                fallback.append(value)
+
+        for candidate in preferred + fallback:
+            numeric = ACInfinityCloudClient._to_float(candidate)
+            if numeric is None:
+                continue
+            if 0.0 <= numeric <= 100.0:
+                return numeric
+            scaled = numeric / 100.0
+            if 0.0 <= scaled <= 100.0:
+                return scaled
+
+        return None
+
+    @staticmethod
+    def _extract_vpd_kpa(data):
+        if not isinstance(data, (dict, list)):
+            return None
+
+        preferred = []
+        fallback = []
+
+        for key, value in ACInfinityCloudClient._iter_key_values(data):
+            key_l = key.lower()
+            leaf = key_l.rsplit(".", 1)[-1]
+
+            if "vpd" not in key_l:
+                continue
+
+            if any(token in leaf for token in ("target", "switch", "setting", "status")):
+                continue
+
+            if leaf in ("vpd", "vpdnum", "vpdnums", "vpdvalue"):
+                preferred.append(value)
+                continue
+
+            fallback.append(value)
+
+        for candidate in preferred + fallback:
+            numeric = ACInfinityCloudClient._to_float(candidate)
+            if numeric is None:
+                continue
+            if 0.0 <= numeric <= 10.0:
+                return numeric
+            scaled = numeric / 100.0
+            if 0.0 <= scaled <= 10.0:
+                return scaled
+
+        return None
+
+    def get_controller_environment(self):
+        if self.mock_mode:
+            return {
+                "temperature_c": self._mock_state.get("temperature_c"),
+                "humidity": self._mock_state.get("humidity"),
+                "vpd_kpa": None,
+            }
+
+        self._ensure_cloud_ready()
+        body = self._post(
+            self.API_URL_GET_DEVICE_INFO_LIST_ALL,
+            {"userId": self.api_token},
+            include_token=True,
+        )
+        devices = body.get("data", [])
+        if not isinstance(devices, list) or not devices:
+            return {"temperature_c": None, "humidity": None, "vpd_kpa": None}
+
+        target = None
+        for device in devices:
+            if str(device.get("devId", "")).strip() == str(self.device_id):
+                target = device
+                break
+        if target is None:
+            target = devices[0]
+
+        device_info = target.get("deviceInfo") or {}
+        sensor_source = device_info if isinstance(device_info, dict) and device_info else target
+        temperature_c = self._extract_temperature_c(sensor_source)
+        humidity = self._extract_humidity_percent(sensor_source)
+        vpd_kpa = self._extract_vpd_kpa(sensor_source)
+
+        # Fallback to mode settings payload if controller list lacks sensor values.
+        if temperature_c is None or humidity is None or vpd_kpa is None:
+            mode_data = self._read_raw_mode_settings()
+            if temperature_c is None:
+                temperature_c = self._extract_temperature_c(mode_data)
+            if humidity is None:
+                humidity = self._extract_humidity_percent(mode_data)
+            if vpd_kpa is None:
+                vpd_kpa = self._extract_vpd_kpa(mode_data)
+
+        result = {"temperature_c": temperature_c, "humidity": humidity, "vpd_kpa": vpd_kpa}
+        self._log_json("AC Infinity controller environment result", result)
+        return result
 
     @staticmethod
     def _normalize_speed_level(value):
@@ -301,7 +586,10 @@ class ACInfinityCloudClient:
         # Report runtime speed as 0 when the fan is off so IoX state is consistent.
         if not is_on:
             speed = 0
-        result = {"is_on": is_on, "speed": speed}
+        result = {
+            "is_on": is_on,
+            "speed": speed,
+        }
         self._log_json("AC Infinity get_fan_state result", result)
         return result
 
