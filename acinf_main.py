@@ -8,7 +8,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.6.045"
+VERSION = "2026.7.1"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -16,8 +16,8 @@ try:
     VERSION_REVISION = int(_version_parts[2])
 except Exception:
     VERSION_YEAR = 2026
-    VERSION_MONTH = 1
-    VERSION_REVISION = 0
+    VERSION_MONTH = 7
+    VERSION_REVISION = 1
 
 
 class ACInfinityFanNode(udi_interface.Node):
@@ -337,6 +337,7 @@ class ACInfinityController(udi_interface.Node):
         required = {
             "user": "",
             "password": "",
+            "temp_unit": "F"
         }
         missing = {}
         for key, default in required.items():

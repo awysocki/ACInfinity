@@ -3,7 +3,7 @@ ND-controller-ICON = GenericCtl
 ND-fan-NAME = AC Infinity Fan
 ND-fan-ICON = GenericFan
 
-ST-ctl-ST-NAME = Node Server Online
+ST-ctl-ST-NAME = Node Server
 ST-ctl-GV1-NAME = Rev Year
 ST-ctl-GV2-NAME = Rev Mon
 ST-ctl-GV3-NAME = Revision
@@ -26,3 +26,5 @@ CMDP-SPEED10-SPD-NAME = Speed
 
 ST_ONOFF-0 = Off
 ST_ONOFF-1 = On
+ST_ONLINEOFFLINE-0 = Offline
+ST_ONLINEOFFLINE-1 = Online

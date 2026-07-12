@@ -1,15 +1,15 @@
 {
-  "name": "AC Infinity Fan",
-  "docs": "https://github.com/your-org/isy-acinfinity",
+  "name": "AC Infinity",
+  "docs": "https://github.com/awysocki/acinfinity",
   "type": "python3",
-  "executable": "acinf_nodeserver.py",
+  "executable": "acinf_main.py",
   "install": "install.sh",
   "description": "ISY/IoX PG3 nodeserver for AC Infinity fan control via cloud API",
-  "version": "2026.6.045",
+  "version": "2026.7.1",
   "notice": "Cloud mode is clean-room implemented. AC Infinity cloud may require HTTP transport; credentials/token may not be encrypted in transit.",
   "shortPoll": 60,
   "longPoll": 300,
-  "profile_version": "2026.6.045",
+  "profile_version": "2026.7.1",
   "restart": "true",
   "language": "python3",
   "requirements": "requirements.txt",
@@ -17,7 +17,7 @@
     {
       "title": "AC Infinity Fan PG3",
       "author": "You",
-      "version": "2026.6.045",
+      "version": "2026.7.1",
       "date": "2026-06-30",
       "source": "Local"
     }
