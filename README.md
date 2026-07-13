@@ -1,4 +1,4 @@
-# ISY AC Infinity Fan (PG3)
+# AC Infinity Fan PG3 Server
 
 This is a Polyglot v3 nodeserver for controlling an AC Infinity fan from ISY/IoX (UD Mobile and Admin Console/web).
 
