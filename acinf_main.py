@@ -1,25 +1,42 @@
 #!/usr/bin/env python3
+import json
 import os
 import re
 import time
 import threading
 import traceback
+from pathlib import Path
 
 import udi_interface
 
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.7.2"
-try:
-    _version_parts = str(VERSION).split(".")
-    VERSION_YEAR = int(_version_parts[0])
-    VERSION_MONTH = int(_version_parts[1])
-    VERSION_REVISION = int(_version_parts[2])
-except Exception:
-    VERSION_YEAR = 2026
-    VERSION_MONTH = 7
-    VERSION_REVISION = 2
+DEFAULT_VERSION = "9.9.9"
+
+
+def _load_version_from_server_json(default_version=DEFAULT_VERSION):
+    try:
+        server_path = Path(__file__).with_name("server.json")
+        with server_path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        version = str(data.get("version", "")).strip()
+        return version or default_version
+    except Exception:
+        return default_version
+
+
+def _parse_version_parts(version_text, default_version=DEFAULT_VERSION):
+    try:
+        version_parts = str(version_text).split(".")
+        return int(version_parts[0]), int(version_parts[1]), int(version_parts[2])
+    except Exception:
+        default_parts = str(default_version).split(".")
+        return int(default_parts[0]), int(default_parts[1]), int(default_parts[2])
+
+
+VERSION = _load_version_from_server_json()
+VERSION_YEAR, VERSION_MONTH, VERSION_REVISION = _parse_version_parts(VERSION)
 
 
 class ACInfinityFanNode(udi_interface.Node):
