@@ -48,11 +48,19 @@ class ACInfinityCloudClient:
 
     @staticmethod
     def _redact_payload(payload):
-        redacted = dict(payload or {})
-        for key in ("password", "appPasswordl", "appPassword", "token"):
-            if key in redacted and redacted[key] not in (None, ""):
-                redacted[key] = "<redacted>"
-        return redacted
+        if isinstance(payload, dict):
+            redacted = {}
+            for key, value in payload.items():
+                if key in ("password", "appPasswordl", "appPassword", "token") and value not in (None, ""):
+                    redacted[key] = "<redacted>"
+                else:
+                    redacted[key] = ACInfinityCloudClient._redact_payload(value)
+            return redacted
+
+        if isinstance(payload, list):
+            return [ACInfinityCloudClient._redact_payload(item) for item in payload]
+
+        return payload
 
     @staticmethod
     def _log_json(label, data):

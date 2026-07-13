@@ -683,7 +683,8 @@ class ACInfinityController(udi_interface.Node):
     def parameter_handler(self, params):
         LOGGER.info("Received custom params update")
         with self._client_lock:
-            self.Parameters.load(params)
+            for key, value in params.items():
+                self.Parameters[key] = value
             self._seed_required_custom_params()
             self._last_login_gate_reason = None
             self._build_client(params)
