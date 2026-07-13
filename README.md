@@ -1,6 +1,6 @@
 # ISY AC Infinity Fan (PG3)
 
-This is a starter Polyglot v3 nodeserver for controlling an AC Infinity fan from ISY/IoX (UD Mobile and Admin Console/web).
+This is a Polyglot v3 nodeserver for controlling an AC Infinity fan from ISY/IoX (UD Mobile and Admin Console/web).
 
 Implementation note: this project uses original clean-room code in this repository. It does not copy source from other projects.
 
@@ -10,7 +10,9 @@ Implementation note: this project uses original clean-room code in this reposito
 - Fan power on/off
 - Fan speed set/query (0-10)
 - Polling-based state refresh
-- Mock mode for UI testing before cloud endpoints are finalized
+- Only tested with AC Infinity Controller 69 pro
+- Changing speed does not turn on fan
+- AC Infinity cloud server only supports http:// no SSL support
 
 Fan node status model:
 
@@ -21,7 +23,7 @@ Fan node status model:
 
 ## Files
 
-- `acinf_nodeserver.py`: PG3 controller + fan node logic
+- `acinf_main.py`: PG3 controller + fan node logic
 - `acinf_cloud.py`: AC Infinity cloud client (replace payload mappings as needed)
 - `server.json`: PG3 metadata and custom parameter definitions
 - `profile/`: nodedefs/editors/NLS shown in IoX
@@ -75,11 +77,11 @@ Read mapping for fan state is defensive and checks multiple keys (`speak`, `onSp
 
 ## Notes
 
-- BLE support is not implemented in this initial version.
+- BLE support is not implemented in this version.
 - Long poll is set to 300 seconds; tune in `server.json` as needed.
 - You can add multiple fan nodes later by expanding controller logic and parameters.
 
 ## License
 
 - MIT License
-- Repository license file: https://github.com/awysocki/ISYACINF/blob/main/LICENSE
+- Repository license file: https://github.com/awysocki/ACInfinity/blob/main/LICENSE

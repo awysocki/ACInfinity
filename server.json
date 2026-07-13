@@ -15,10 +15,10 @@
   "requirements": "requirements.txt",
   "credits": [
     {
-      "title": "AC Infinity Fan PG3",
+      "title": "AC Infinity",
       "author": "Andy Wysocki",
       "version": "2026.7.1",
-      "date": "2026-06-30",
+      "date": "2026-07-13",
       "source": "Local"
     }
   ],
