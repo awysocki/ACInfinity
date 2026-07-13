@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+import os
+import re
 import time
 import threading
 import traceback
@@ -8,7 +10,7 @@ import udi_interface
 from acinf_cloud import ACInfinityCloudClient
 
 LOGGER = udi_interface.LOGGER
-VERSION = "2026.7.1"
+VERSION = "2026.7.2"
 try:
     _version_parts = str(VERSION).split(".")
     VERSION_YEAR = int(_version_parts[0])
@@ -17,7 +19,7 @@ try:
 except Exception:
     VERSION_YEAR = 2026
     VERSION_MONTH = 7
-    VERSION_REVISION = 1
+    VERSION_REVISION = 2
 
 
 class ACInfinityFanNode(udi_interface.Node):
@@ -305,6 +307,8 @@ class ACInfinityController(udi_interface.Node):
         self.drivers = [dict(d) for d in self.drivers]
         self._ensure_driver_definitions()
         self.poly = polyglot
+        self._controller_base_name = self._strip_slot_suffix(name)
+        self._refresh_controller_name(apply_runtime=False)
         self.Parameters = udi_interface.Custom(polyglot, "customparams")
         self.client = None
         self._client_lock = threading.RLock()
@@ -321,6 +325,77 @@ class ACInfinityController(udi_interface.Node):
         self.poly.subscribe(self.poly.CUSTOMPARAMS, self.parameter_handler)
         self.poly.subscribe(self.poly.POLL, self.poll)
         self.poly.subscribe(self.poly.STOP, self.stop)
+
+    @staticmethod
+    def _strip_slot_suffix(name):
+        stripped = re.sub(r"\s*\(\d+\)\s*$", "", str(name or "")).strip()
+        if not stripped:
+            return "ACInfinity"
+        if stripped in ("AC Infinity Controller", "AC Infinity"):
+            return "ACInfinity"
+        return stripped
+
+    @staticmethod
+    def _safe_int(value):
+        try:
+            parsed = int(str(value).strip())
+        except Exception:
+            return None
+        return parsed if parsed > 0 else None
+
+    def _detect_slot_number(self):
+        # Try commonly used Polyglot fields first.
+        candidate_attrs = (
+            "profileNum",
+            "profile_number",
+            "slot",
+            "nodeServerSlot",
+            "nodeserver_slot",
+        )
+        for attr in candidate_attrs:
+            if hasattr(self.poly, attr):
+                slot = self._safe_int(getattr(self.poly, attr))
+                if slot is not None:
+                    return slot
+
+        # Fall back to common config dict fields if present.
+        for cfg_attr in ("polyConfig", "config"):
+            cfg = getattr(self.poly, cfg_attr, None)
+            if isinstance(cfg, dict):
+                for key in candidate_attrs:
+                    slot = self._safe_int(cfg.get(key))
+                    if slot is not None:
+                        return slot
+
+        # Final fallback: environment variables used by some launchers.
+        for env_key in ("PROFILE_NUM", "PG3_SLOT", "NODESERVER_SLOT", "SLOT"):
+            slot = self._safe_int(os.environ.get(env_key))
+            if slot is not None:
+                return slot
+
+        return None
+
+    def _desired_controller_name(self):
+        slot = self._detect_slot_number()
+        if slot is None:
+            return self._controller_base_name
+        return f"{self._controller_base_name}({slot})"
+
+    def _refresh_controller_name(self, apply_runtime=True):
+        desired_name = self._desired_controller_name()
+        if getattr(self, "name", None) == desired_name:
+            return
+
+        self.name = desired_name
+        if not apply_runtime:
+            return
+
+        try:
+            # If the node already exists, request a runtime rename update.
+            self.rename = True
+            self.poly.addNode(self)
+        except Exception:
+            LOGGER.debug("Controller rename update could not be applied immediately")
 
     def _ensure_driver_definitions(self):
         existing = {str(d.get("driver")) for d in self.drivers if isinstance(d, dict)}
@@ -616,6 +691,7 @@ class ACInfinityController(udi_interface.Node):
 
     def start(self):
         LOGGER.info("Starting AC Infinity nodeserver")
+        self._refresh_controller_name()
         self.poly.setCustomParamsDoc()
         with self._client_lock:
             self._seed_required_custom_params()

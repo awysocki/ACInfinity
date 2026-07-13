@@ -11,7 +11,7 @@ Implementation note: this project uses original clean-room code in this reposito
 - Fan speed set/query (0-10)
 - Polling-based state refresh
 - Only tested with AC Infinity Controller 69 pro
-- Changing speed does not turn on fan
+- Changing speed via ISY/PG3 does not turn on fan, they are broken out
 - AC Infinity cloud server only supports http:// no SSL support
 
 Fan node status model:
