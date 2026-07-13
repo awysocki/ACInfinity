@@ -334,6 +334,7 @@ class ACInfinityController(udi_interface.Node):
         self._last_logged_temperature_c = None
         self._last_logged_humidity = None
         self._last_logged_vpd_kpa = None
+        self._last_params_signature = None
         self._temp_display_unit = "C"
         self._verify_timeout_s = ACInfinityFanNode.COMMAND_VERIFY_TIMEOUT_S
         self._verify_interval_s = ACInfinityFanNode.COMMAND_VERIFY_INTERVAL_S
@@ -699,9 +700,13 @@ class ACInfinityController(udi_interface.Node):
 
     def parameter_handler(self, params):
         LOGGER.info("Received custom params update")
+        signature = tuple(sorted((str(k), "" if v is None else str(v)) for k, v in params.items()))
+        if signature == self._last_params_signature:
+            LOGGER.debug("Ignoring duplicate custom params update")
+            return
+
         with self._client_lock:
-            for key, value in params.items():
-                self.Parameters[key] = value
+            self._last_params_signature = signature
             self._seed_required_custom_params()
             self._last_login_gate_reason = None
             self._build_client(params)

@@ -5,11 +5,11 @@
   "executable": "acinf_main.py",
   "install": "install.sh",
   "description": "ISY/IoX PG3 nodeserver for ACInfinity fan control via cloud API",
-  "version": "2026.7.4",
+  "version": "2026.7.5",
   "notice": "Cloud mode is clean-room implemented. ACInfinity cloud may require HTTP transport; credentials/token may not be encrypted in transit.",
   "shortPoll": 60,
   "longPoll": 300,
-  "profile_version": "2026.7.4",
+  "profile_version": "2026.7.5",
   "restart": "true",
   "language": "python3",
   "requirements": "requirements.txt",
@@ -17,7 +17,7 @@
     {
       "title": "ACInfinity",
       "author": "Andy Wysocki",
-      "version": "2026.7.4",
+      "version": "2026.7.5",
       "date": "2026-07-13",
       "source": "Local"
     }
