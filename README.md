@@ -68,17 +68,12 @@ Read mapping for fan state is defensive and checks multiple keys (`speak`, `onSp
 
 ## Install
 
-1. Put this project in a git repo.
-2. In PG3, add a new local/custom nodeserver and point it to the repo.
-3. Start nodeserver with `mock_mode=true` first.
-4. Confirm fan node appears in IoX and control works in UD Mobile.
-5. Switch to `mock_mode=false` and set token or email/password plus device/port.
-6. Restart nodeserver and validate live cloud control.
+1. Install this via PG3 Store
 
 ## Notes
 
 - BLE support is not implemented in this version.
-- Long poll is set to 300 seconds; tune in `server.json` as needed.
+- Long poll is set to 300 seconds; tune in `server.json` or PG3 Admin page as needed.
 - You can add multiple fan nodes later by expanding controller logic and parameters.
 
 ## License
